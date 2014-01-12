@@ -77,17 +77,6 @@ public class Parser {
 			parseFuncCall();
 			break;
 		default:
-			for (int i = 0; i < 5 && token != null; ++i) {
-				if (token.getType() == Token.Type.IDENTIFIER)
-					System.out.println(token.getType() + " - "
-							+ token.getName());
-				else if (token.getType() == Token.Type.NUMBER)
-					System.out.println(token.getType() + " - "
-							+ token.getValue());
-				else
-					System.out.println(token.getType());
-				nextToken();
-			}
 			syntaxError("Expected Factor");
 			break;
 		}
