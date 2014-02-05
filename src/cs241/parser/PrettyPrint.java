@@ -25,25 +25,36 @@ public class PrettyPrint {
 	}
 	
 	public String Print(Computation node) {
-		tabs(); sb.append("main:\n");
+		tabs(); sb.append("Main => {\n");
 		indent += 1;
 		
 		if (node.getVariables() != null) {
+			tabs(); sb.append("Variables => {\n");
+			indent += 1;
 			for (Variable v : node.getVariables())
 				Print(v);
+			indent -= 1;
+			tabs(); sb.append("},\n");
 		}
 		
 		if (node.getFunctions() != null) {
+			tabs(); sb.append("Functions => {\n");
+			indent += 1;
 			for (Function f : node.getFunctions())
 				Print(f);
+			indent -= 1;
+			tabs(); sb.append("},\n");
 		}
 		
-		if (node.getBody() != null) {
-			for (Statement s : node.getBody())
-				Print(s);
-		}
+		tabs(); sb.append("Body => {\n");
+		indent += 1;
+		for (Statement s : node.getBody())
+			Print(s);
+		indent -= 1;
+		tabs(); sb.append("},\n");
 		
 		indent -= 1;
+		sb.append("},");
 		
 		String result = sb.toString();
 		sb = new StringBuilder();
@@ -51,67 +62,98 @@ public class PrettyPrint {
 	}
 	
 	private void Print(Relation node) {
+		tabs(); sb.append("Relation => {\n");
+		indent += 1;
+		tabs(); sb.append("operator => ");
 		switch (node.getOperator()) {
-		case EQUALS: 		tabs(); sb.append("==:\n"); break;
-		case NOTEQUALS:		tabs(); sb.append("!=:\n"); break;
-		case LESSTHAN:		tabs(); sb.append("<:\n"); break;
-		case LESSTHANEQ:	tabs(); sb.append("<=:\n"); break;
-		case GREATERTHAN:	tabs(); sb.append(">:\n"); break;
-		case GREATERTHANEQ:	tabs(); sb.append(">=:\n"); break;
+		case EQUALS: sb.append("==,\n"); break;
+		case NOTEQUALS: sb.append("!=,\n"); break;
+		case LESSTHAN: sb.append("<,\n"); break;
+		case LESSTHANEQ: sb.append("<=,\n"); break;
+		case GREATERTHAN: sb.append(">,\n"); break;
+		case GREATERTHANEQ: sb.append(">=,\n"); break;
 		}
+		
+		tabs(); sb.append("left => {\n");
 		indent += 1;
 		Print(node.getLeft());
+		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		tabs(); sb.append("right => {\n");
+		indent += 1;
 		Print(node.getRight());
 		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 	
 	private void Print(Variable node) {
 		switch (node.getType()) {
 		case VARIABLE:
-			tabs(); sb.append("var " + node.getName() + "\n");
+			tabs(); sb.append("Variable => " + node.getName() + ",\n");
 			break;
 		case ARRAY:
-			tabs(); sb.append("array " + node.getName());
+			tabs(); sb.append("Array => {\n");
+			indent += 1;
+			tabs(); sb.append("name => " + node.getName() + ",\n");
+			tabs(); sb.append("dimensions => { ");
 			ArrayList<Integer> dimensions = node.getDimensions();
 			for (int d : dimensions) {
 				sb.append("[" + d + "]");
 			}
-			sb.append("\n");
+			sb.append(" },\n");
+			indent -= 1;
+			tabs(); sb.append("},\n");
 			break;
 		}
 	}
 	
 	private void Print(Function node) {
-		switch (node.getType()) {
-		case PROCEDURE:
-			tabs(); sb.append("procedure ");
-			break;
-		case FUNCTION:
-			tabs(); sb.append("functions ");
-			break;
-		}
-		sb.append(node.getName() + "(\n");
-		indent += 1;
-		if (node.getParameters() != null) {
-			for (String parameter : node.getParameters()) {
-				tabs(); sb.append(parameter + "\n");
-			}
-		}
-		indent -= 1;
-		tabs(); sb.append(")\n");
+		tabs(); sb.append("Function => {\n");
 		indent += 1;
 		
+		tabs(); sb.append("type => ");
+		switch (node.getType()) {
+		case PROCEDURE: sb.append("procedure,\n"); break;
+		case FUNCTION: sb.append("function,\n"); break;
+		}
+		
+		tabs(); sb.append("name => " + node.getName() + ",\n");
+		tabs(); sb.append("parameters => { ");
+		if (node.getParameters() != null) {
+			sb.append("\n");
+			indent += 1;
+			for (String parameter : node.getParameters()) {
+				tabs(); sb.append(parameter + ",\n");
+			}
+			indent -= 1;
+			tabs();
+		}
+		sb.append("},\n");
+		
 		if (node.getVariables() != null) {
+			tabs(); sb.append("variables => {\n");
+			indent += 1;
 			for (Variable v : node.getVariables()) {
 				Print(v);
 			}
+			indent -= 1;
+			tabs(); sb.append("},\n");
 		}
 		
-		if (node.getBody() != null) {
-			for (Statement s : node.getBody()) {
-				Print(s);
-			}
+		tabs(); sb.append("body => {\n");
+		indent += 1;
+		for (Statement s : node.getBody()) {
+			Print(s);
 		}
+		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 
 	private void Print(Statement node) {
@@ -128,11 +170,23 @@ public class PrettyPrint {
 	}
 
 	private void Print(Statement.Assignment node) {
-		tabs(); sb.append("<- :\n");
+		tabs(); sb.append("Assignment => {\n");
+		indent += 1;
+		
+		tabs(); sb.append("left => {\n");
 		indent += 1;
 		Print(node.getLeft());
+		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		tabs(); sb.append("right => {\n");
+		indent += 1;
 		Print(node.getRight());
 		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 
 	private void Print(Statement.FunctionCall node) {
@@ -140,41 +194,62 @@ public class PrettyPrint {
 	}
 
 	private void Print(Statement.If node) {
-		tabs(); sb.append("if:\n");
+		tabs(); sb.append("If => {\n");
+		indent += 1;
+		
+		tabs(); sb.append("conditon => {\n");
 		indent += 1;
 		Print(node.getCondition());
 		indent -= 1;
-		tabs(); sb.append("then:\n");
+		tabs(); sb.append("},\n");
+		
+		tabs(); sb.append("then => {\n");
 		indent += 1;
 		for (Statement s : node.getThenBlock())
 			Print(s);
 		indent -= 1;
+		tabs(); sb.append("},\n");
+		
 		if (node.getElseBlock() != null) {
-			tabs(); sb.append("else:\n");
+			tabs(); sb.append("else => {\n");
 			indent += 1;
-			for (Statement s: node.getElseBlock())
+			for (Statement s : node.getElseBlock())
 				Print(s);
 			indent -= 1;
+			tabs(); sb.append("},\n");
 		}
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 
 	private void Print(Statement.While node) {
-		tabs(); sb.append("while:\n");
+		tabs(); sb.append("While => {\n");
+		indent += 1;
+		
+		tabs(); sb.append("condition => {\n");
 		indent += 1;
 		Print(node.getCondition());
 		indent -= 1;
-		tabs(); sb.append("do:\n");
+		tabs(); sb.append("},\n");
+		
+		tabs(); sb.append("do => {\n");
 		indent += 1;
 		for (Statement s : node.getBlock())
 			Print(s);
 		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 
 	private void Print(Statement.Return node) {
-		tabs(); sb.append("return: \n");
+		tabs(); sb.append("Return => {\n");
 		indent += 1;
 		Print(node.getExpression());
 		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 	
 	private void Print(Expression node) {
@@ -189,44 +264,70 @@ public class PrettyPrint {
 	}
 	
 	public void Print(Expression.Binary node) {
+		tabs(); sb.append("BinaryOperator => {\n");
+		indent += 1;
+		
+		tabs(); sb.append("operator => ");
 		switch (node.getOperator()) {
-		case ADDITION: tabs(); sb.append("+ :\n"); break;
-		case DIVISION: tabs(); sb.append("/ :\n"); break;
-		case MULTIPLICATION: tabs(); sb.append("* :\n"); break;
-		case SUBTRACTION: tabs(); sb.append("- :\n"); break;
+		case ADDITION: sb.append("+,\n"); break;
+		case DIVISION: sb.append("/,\n"); break;
+		case MULTIPLICATION: sb.append("*,\n"); break;
+		case SUBTRACTION: sb.append("-,\n"); break;
 		}
+		
+		tabs(); sb.append("left => {\n");
 		indent += 1;
 		Print(node.getLeft());
+		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		tabs(); sb.append("right => {\n");
+		indent += 1;
 		Print(node.getRight());
 		indent -= 1;
+		tabs(); sb.append("},\n");
+		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 	
 	public void Print(Expression.Designator node) {
-		tabs(); sb.append(node.getName() + "\n");
+		tabs(); sb.append("Designator => {\n");
+		indent += 1;
+		tabs(); sb.append("name => " + node.getName() + ",\n");
 		if (node.getIndices() != null) {
+			tabs(); sb.append("indices => {\n");
+			indent += 1;
 			for (Expression e : node.getIndices()) {
-				tabs(); sb.append("[\n");
-				indent += 1;
 				Print(e);
-				indent -= 1;
-				tabs(); sb.append("]\n");
 			}
+			indent -= 1;
+			tabs();sb.append("},\n");
 		}
-		
+		indent -= 1;
+		tabs(); sb.append("},\n");
 	}
 	
 	public void Print(Expression.Number node) {
-		tabs(); sb.append(node.getValue() + "\n");
+		tabs(); sb.append("Number => " + node.getValue() + ",\n");
 	}
 	
 	public void Print(Expression.FunctionCall node) {
-		tabs(); sb.append("call " + node.getName() + "\n");
-		tabs(); sb.append("(\n");
+		tabs(); sb.append("FunctionCall => {\n");
 		indent += 1;
-		for (Expression argument : node.getArguments()) {
-			Print(argument);
+		tabs(); sb.append("name => " + node.getName() + ",\n");
+		tabs(); sb.append("arguments => { ");
+		if (node.getArguments() != null) {
+			sb.append("\n");
+			indent += 1;
+			for (Expression argument : node.getArguments()) {
+				Print(argument);
+			}
+			indent -= 1;
+			tabs();
 		}
+		sb.append("},\n");
 		indent -= 1;
-		tabs(); sb.append(")\n");
+		tabs(); sb.append("},\n");
 	}
 }
