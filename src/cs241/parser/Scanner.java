@@ -83,7 +83,7 @@ public class Scanner {
 		nextChar();
 		
 		while (!EOF && isDigit(in)) {
-			value += value * 10 + (in - '0');
+			value = value * 10 + (in - '0');
 			nextChar();
 			// TODO: Should we be checking overflow?
 			if (value < 0)
