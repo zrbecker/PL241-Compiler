@@ -1,9 +1,11 @@
+package cs241;
+
 import java.io.File;
 import java.io.Reader;
 import java.io.FileReader;
 import java.io.FileNotFoundException;
 
-import parser.Parser;
+import cs241.parser.Parser;
 
 public class Compiler {
 	File inputFile;

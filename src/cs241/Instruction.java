@@ -1,3 +1,5 @@
+package cs241;
+
 public class Instruction {
 	public enum InstructionType {
 		NEG,
