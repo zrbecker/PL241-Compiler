@@ -6,6 +6,7 @@ import java.io.FileReader;
 import java.io.FileNotFoundException;
 
 import cs241.parser.Parser;
+import cs241.parser.ParserException;
 
 public class Compiler {
 	File inputFile;
@@ -22,6 +23,10 @@ public class Compiler {
 
 	public void compile() throws FileNotFoundException {
 		Reader reader = new FileReader(inputFile);
-		parser.parse(reader);
+		try {
+			parser.parse(reader);
+		} catch (ParserException e) {
+			e.printStackTrace();
+		}
 	}
 }
