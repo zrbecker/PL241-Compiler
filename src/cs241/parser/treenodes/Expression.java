@@ -4,18 +4,18 @@ import java.util.ArrayList;
 
 public abstract class Expression {
 	public static class Binary extends Expression {
-		public enum Operator {
+		public enum BinaryOperator {
 			MULTIPLICATION,
 			DIVISION,
 			ADDITION,
 			SUBTRACTION
 		}
 		
-		Operator op;
+		BinaryOperator op;
 		Expression left;
 		Expression right;
 		
-		public Binary(Expression left, Operator op, Expression right) {
+		public Binary(Expression left, BinaryOperator op, Expression right) {
 			this.left = left;
 			this.op = op;
 			this.right = right;
@@ -29,7 +29,7 @@ public abstract class Expression {
 			return right;
 		}
 		
-		public Operator getOperator() {
+		public BinaryOperator getOperator() {
 			return op;
 		}
 	}
@@ -79,15 +79,15 @@ public abstract class Expression {
 	 * semantic error. A function call statement will simply be a wrapper
 	 * around this class.
 	 */
-	public static class FunctionCall extends Expression {
+	public static class FunctionCallExp extends Expression {
 		String name;
 		ArrayList<Expression> arguments;
 		
-		public FunctionCall(String name) {
+		public FunctionCallExp(String name) {
 			this(name, null);
 		}
 		
-		public FunctionCall(String name, ArrayList<Expression> arguments) {
+		public FunctionCallExp(String name, ArrayList<Expression> arguments) {
 			this.name = name;
 			this.arguments = arguments;
 		}

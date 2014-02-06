@@ -232,7 +232,7 @@ public class Parser {
 	}
 	
 	Statement.FunctionCall parseFunctionCall() throws ParserException {
-		Expression.FunctionCall expression = parseFunctionCallExpression();
+		Expression.FunctionCallExp expression = parseFunctionCallExpression();
 		return new Statement.FunctionCall(expression);
 	}
 	
@@ -268,11 +268,11 @@ public class Parser {
 		Expression left = parseTerm();
 		if (isTokens(Token.Type.ADDITION, Token.Type.SUBTRACTION)) {
 			Token.Type type = parseTokens(Token.Type.ADDITION, Token.Type.SUBTRACTION);
-			Expression.Binary.Operator op;
+			Expression.Binary.BinaryOperator op;
 			if (type == Token.Type.ADDITION)
-				op = Expression.Binary.Operator.ADDITION;
+				op = Expression.Binary.BinaryOperator.ADDITION;
 			else
-				op = Expression.Binary.Operator.SUBTRACTION;
+				op = Expression.Binary.BinaryOperator.SUBTRACTION;
 			Expression right = parseExpression();
 			return new Expression.Binary(left, op, right);
 		}
@@ -284,11 +284,11 @@ public class Parser {
 		Expression left = parseFactor();
 		if (isTokens(Token.Type.MULTIPLICATION, Token.Type.DIVISION)) {
 			Token.Type type = parseTokens(Token.Type.MULTIPLICATION, Token.Type.DIVISION);
-			Expression.Binary.Operator op;
+			Expression.Binary.BinaryOperator op;
 			if (type == Token.Type.MULTIPLICATION)
-				op = Expression.Binary.Operator.MULTIPLICATION;
+				op = Expression.Binary.BinaryOperator.MULTIPLICATION;
 			else
-				op = Expression.Binary.Operator.DIVISION;
+				op = Expression.Binary.BinaryOperator.DIVISION;
 			Expression right = parseTerm();
 			return new Expression.Binary(left, op, right);
 		}
@@ -328,7 +328,7 @@ public class Parser {
 		return new Expression.Designator(name, indices);
 	}
 	
-	Expression.FunctionCall parseFunctionCallExpression() throws ParserException {
+	Expression.FunctionCallExp parseFunctionCallExpression() throws ParserException {
 		parseTokens(Token.Type.KEYWORD_CALL);
 		String name = parseIdentifier();
 		ArrayList<Expression> arguments = null;
@@ -344,32 +344,32 @@ public class Parser {
 			}
 			parseTokens(Token.Type.RIGHT_PARANTHESIS);
 		}
-		return new Expression.FunctionCall(name, arguments);
+		return new Expression.FunctionCallExp(name, arguments);
 	}
 	
 	Relation parseRelation() throws ParserException {
 		Expression left = parseExpression();
 		Token.Type type = parseTokens(Token.Type.EQUALS, Token.Type.NOTEQUALS,
 				Token.Type.LESSTHAN, Token.Type.LESSTHANEQ, Token.Type.GREATERTHAN, Token.Type.GREATERTHANEQ);
-		Relation.Operator op;
+		Relation.RelationOperator op;
 		switch (type) {
 		case EQUALS:
-			op = Relation.Operator.EQUALS;
+			op = Relation.RelationOperator.EQUALS;
 			break;
 		case NOTEQUALS:
-			op = Relation.Operator.NOTEQUALS;
+			op = Relation.RelationOperator.NOTEQUALS;
 			break;
 		case LESSTHAN:
-			op = Relation.Operator.LESSTHAN;
+			op = Relation.RelationOperator.LESSTHAN;
 			break;
 		case LESSTHANEQ:
-			op = Relation.Operator.LESSTHANEQ;
+			op = Relation.RelationOperator.LESSTHANEQ;
 			break;
 		case GREATERTHAN:
-			op = Relation.Operator.GREATERTHAN;
+			op = Relation.RelationOperator.GREATERTHAN;
 			break;
 		case GREATERTHANEQ:
-			op = Relation.Operator.GREATERTHANEQ;
+			op = Relation.RelationOperator.GREATERTHANEQ;
 			break;
 		default:
 			throw new ParserException("Expection relational operator");

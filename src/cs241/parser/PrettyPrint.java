@@ -257,8 +257,8 @@ public class PrettyPrint {
 			Print((Expression.Binary) node);
 		else if (node instanceof Expression.Designator)
 			Print((Expression.Designator) node);
-		else if (node instanceof Expression.FunctionCall)
-			Print((Expression.FunctionCall) node);
+		else if (node instanceof Expression.FunctionCallExp)
+			Print((Expression.FunctionCallExp) node);
 		else if (node instanceof Expression.Number)
 			Print((Expression.Number) node);
 	}
@@ -312,7 +312,7 @@ public class PrettyPrint {
 		tabs(); sb.append("Number => " + node.getValue() + ",\n");
 	}
 	
-	public void Print(Expression.FunctionCall node) {
+	public void Print(Expression.FunctionCallExp node) {
 		tabs(); sb.append("FunctionCall => {\n");
 		indent += 1;
 		tabs(); sb.append("name => " + node.getName() + ",\n");

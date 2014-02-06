@@ -22,17 +22,17 @@ public abstract class Statement {
 	}
 	
 	public static class FunctionCall extends Statement {
-		Expression.FunctionCall expression;
+		Expression.FunctionCallExp expression;
 		
 		public FunctionCall(String name) {
 			this(name, null);
 		}
 		
 		public FunctionCall(String name, ArrayList<Expression> arguments) {
-			expression = new Expression.FunctionCall(name, arguments);
+			expression = new Expression.FunctionCallExp(name, arguments);
 		}
 
-		public FunctionCall(Expression.FunctionCall expression) {
+		public FunctionCall(Expression.FunctionCallExp expression) {
 			this.expression = expression;
 		}
 		
@@ -44,7 +44,7 @@ public abstract class Statement {
 			return expression.getArguments();
 		}
 		
-		public Expression.FunctionCall getFunctionCallExpression() {
+		public Expression.FunctionCallExp getFunctionCallExpression() {
 			return expression;
 		}
 	}

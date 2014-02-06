@@ -1,7 +1,7 @@
 package cs241.parser.treenodes;
 
 public class Relation {
-	public enum Operator {
+	public enum RelationOperator {
 		EQUALS,
 		NOTEQUALS,
 		LESSTHAN,
@@ -11,10 +11,10 @@ public class Relation {
 	}
 	
 	Expression left;
-	Operator op;
+	RelationOperator op;
 	Expression right;
 	
-	public Relation(Expression left, Operator op, Expression right) {
+	public Relation(Expression left, RelationOperator op, Expression right) {
 		this.left = left;
 		this.op = op;
 		this.right = right;
@@ -28,7 +28,7 @@ public class Relation {
 		return right;
 	}
 	
-	public Operator getOperator() {
+	public RelationOperator getOperator() {
 		return op;
 	}
 }

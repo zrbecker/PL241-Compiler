@@ -26,7 +26,8 @@ public class Instruction {
 		BGT,
 		READ,
 		WRITE,
-		WLN
+		WLN,
+		LOADADD
 	}
 
 	private static int nextInstructionID = 1;
@@ -40,11 +41,11 @@ public class Instruction {
 	}
 	
 	InstructionType type;
-	int[] args;
+	Argument[] args;
 	int instructionID;
-	public Instruction(InstructionType t, int[] a) {
+	public Instruction(InstructionType t, Argument[] a) {
 		type = t;
-		args = new int[a.length];
+		args = new Argument[a.length];
 		for(int i = 0; i < a.length; i++) {
 			args[i] = a[i];
 		}
@@ -62,6 +63,7 @@ public class Instruction {
 				assert(args.length == 0);
 				break;
 			case PHI:
+			case LOADADD:
 				assert(args.length >= 2);
 				break;
 			default:
@@ -69,6 +71,7 @@ public class Instruction {
 				break;
 		}
 		instructionID = nextInstructionID;
+		idToInstruction.put(instructionID, this);
 		nextInstructionID++;
 	}
 
@@ -76,7 +79,7 @@ public class Instruction {
 		int hash = type.hashCode();
 		int pow = 107;
 		for(int i = 0; i < args.length; i++) {
-			hash+=pow*args[i];
+			hash+=pow*args[i].hashCode();
 			pow*=107;
 		}
 		return hash;

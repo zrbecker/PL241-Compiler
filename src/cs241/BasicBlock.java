@@ -11,26 +11,36 @@ import java.util.Map;
  */
 public class BasicBlock {
 	//Code structure
-	List<BasicBlock> parents;
 	List<BasicBlock> children;
+	BasicBlock next;
+	BasicBlock prev;
 	
 	//Dominator tree
 	BasicBlock dominator;
 	List<BasicBlock> dominated;
 	
 	List<Instruction> instructions;
-	Map<String,Integer> varLookupTable;
+	Map<String,Argument> varLookupTable;
+	int bbID;
+	
+	private static int nextBBID = 1;
+	private static Map<Integer,BasicBlock> idToBB = new HashMap<Integer,BasicBlock>();
+	
+	public static BasicBlock getBasicBlockByID(int id) {
+		return idToBB.get(id);
+	}
+	public static int nextInstructionID() {
+		return nextBBID;
+	}
 	
 	public BasicBlock() {
-		parents = new ArrayList<BasicBlock>();
 		children = new ArrayList<BasicBlock>();
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
-		varLookupTable = new HashMap<String,Integer>();
-	}
-	
-	public void addParent(BasicBlock p) {
-		parents.add(p);
+		varLookupTable = new HashMap<String,Argument>();
+		bbID = nextBBID;
+		idToBB.put(bbID, this);
+		nextBBID++;
 	}
 
 	public void addChild(BasicBlock c) {
@@ -51,5 +61,11 @@ public class BasicBlock {
 
 	public void appendInstruction(Instruction i) {
 		instructions.add(i);
+	}
+	public void setNext(BasicBlock n) {
+		next = n;
+	}
+	public void setPrevious(BasicBlock p) {
+		next = p;
 	}
 }
