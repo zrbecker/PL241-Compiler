@@ -1,15 +1,17 @@
 package cs241;
 
-import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
 /**`
  * Class to keep track of what code is in what basic block
  */
 public class BasicBlock {
 	//Code structure
-	BasicBlock parent;
+	List<BasicBlock> parents;
 	List<BasicBlock> children;
 	
 	//Dominator tree
@@ -17,15 +19,18 @@ public class BasicBlock {
 	List<BasicBlock> dominated;
 	
 	List<Instruction> instructions;
-
+	Map<String,Integer> varLookupTable;
+	
 	public BasicBlock() {
+		parents = new ArrayList<BasicBlock>();
 		children = new ArrayList<BasicBlock>();
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
+		varLookupTable = new HashMap<String,Integer>();
 	}
 	
-	public void setParent(BasicBlock p) {
-		parent = p;
+	public void addParent(BasicBlock p) {
+		parents.add(p);
 	}
 
 	public void addChild(BasicBlock c) {

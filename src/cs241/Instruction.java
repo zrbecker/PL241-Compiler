@@ -1,5 +1,8 @@
 package cs241;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class Instruction {
 	public enum InstructionType {
 		NEG,
@@ -27,6 +30,14 @@ public class Instruction {
 	}
 
 	private static int nextInstructionID = 1;
+	private static Map<Integer,Instruction> idToInstruction = new HashMap<Integer,Instruction>();
+	
+	public static Instruction getInstructionByID(int id) {
+		return idToInstruction.get(id);
+	}
+	public static int nextInstructionID() {
+		return nextInstructionID;
+	}
 	
 	InstructionType type;
 	int[] args;
