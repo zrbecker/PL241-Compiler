@@ -5,10 +5,15 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import cs241.Argument.ArrayName;
-import cs241.Argument.BBID;
+import cs241.Argument.BasicBlockID;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
@@ -53,6 +58,12 @@ public class Compiler {
 		
 		List<Statement> mainCode = c.getBody();
 		compileIntoBBs(mainCode,mainRoot);
+		BasicBlock t = mainRoot;
+		while(t.next != null)
+			t = t.next;
+		t.appendInstruction(new Instruction(InstructionType.END,new Argument[0]));
+		
+		System.out.println(mainRoot);
 	}
 	
 	public Computation getParseTree() throws FileNotFoundException {
@@ -69,7 +80,6 @@ public class Compiler {
 	/*
 	 * Compiles code into a basic block structure
 	 */
-	//TODO: handle passing around var lookup table and phi instructions
 	public void compileIntoBBs(List<Statement> code, BasicBlock currBB) {
 		for (Statement curr: code) {
 			if(curr instanceof Assignment) {
@@ -79,64 +89,38 @@ public class Compiler {
 				//Compile the expression and implicitly assign the variable to arg
 				Argument arg = compileExpression(currAssignment.getRight(),currBB);
 				
-				if(des.getIndices().size() == 0 && arg instanceof InstructionID) {
+				if((des.getIndices() == null || des.getIndices().size() == 0) 
+						&& (arg instanceof InstructionID || arg instanceof Value)) {
 					String varName = currAssignment.getLeft().getName();
 					currBB.varLookupTable.put(varName, arg);
+					currBB.changedVariables.add(varName);
 				} else {
 					//TODO: handle arrays
 					System.out.println("Error cannot assign to arrays yet.");
 				}
 			} else if (curr instanceof FunctionCall) {
 				FunctionCall currFC = (FunctionCall) curr;
-				
-				BasicBlock call = new BasicBlock();
-				BasicBlock afterCall = new BasicBlock();
-				
-				//Set up parent/child relationship
-				List<BasicBlock> oldChildren = currBB.children;
-				currBB.children = new ArrayList<BasicBlock>();
-				currBB.addChild(call);
-				call.addChild(afterCall);
-				afterCall.children = oldChildren;
-				
-				call.addParent(currBB);
-				afterCall.addParent(call);
-				for(BasicBlock child : oldChildren) {
-					child.parents.remove(currBB);
-					child.addParent(afterCall);
+	
+				//TODO:handle function calls right
+				//Compile arguments to the function
+				List<Argument> args = new LinkedList<Argument>();
+				args.add(new FunctionName(currFC.getName()));
+				for(Expression exp : currFC.getArguments()) {
+					args.add(compileExpression(exp,currBB));
 				}
 				
-				//Set up dominator tree
-				currBB.addDominated(call);
-				call.addDominated(afterCall);
-				
-				call.setDominator(currBB);
-				afterCall.setDominator(call);
-				
-				//Set up linear instruction order linked list
-				BasicBlock next = currBB.next;
-				currBB.setNext(call);
-				call.setNext(afterCall);
-				afterCall.setNext(next);
-				call.setPrevious(currBB);
-				afterCall.setPrevious(call);
-				if(next != null)
-					next.setPrevious(afterCall);
-				
-				//TODO:handle function calls right
 				//Add the function call instruction
-				Argument[] arg = new Argument[1];
-				arg[0] = new FunctionName(currFC.getName());
-				call.appendInstruction(new Instruction(InstructionType.FUNCTION,arg));
-				
-				currBB = afterCall;
-				System.out.println("Error cannot call functions yet.");
+				Argument[] argsArr = new Argument[args.size()];
+				args.toArray(argsArr);
+				currBB.appendInstruction(new Instruction(InstructionType.FUNCTION,argsArr));
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
-				boolean thenOnly = currIf.getElseBlock() == null;
+				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
 
 				BasicBlock ifThen = new BasicBlock();
+				ifThen.varLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
 				BasicBlock ifElse = new BasicBlock();
+				ifElse.varLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
 				BasicBlock afterIf = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -190,7 +174,7 @@ public class Compiler {
 					next.prev = afterIf;
 
 				//Compile the condition for the if
-				BBID branchID = new BBID(thenOnly ? afterIf.bbID : ifElse.bbID);
+				BasicBlockID branchID = thenOnly ? afterIf.bbID : ifElse.bbID;
 				compileCondition(currIf.getCondition(),currBB, branchID);
 				
 				//Compile the branches
@@ -200,12 +184,29 @@ public class Compiler {
 				
 				//Add the branch from the ifthen to after the ifelse
 				if(!thenOnly) {
-					BBID afterIfID = new BBID(afterIf.bbID);
-					Argument[] branchArgs = {afterIfID};
+					Argument[] branchArgs = {afterIf.bbID};
 					Instruction i = new Instruction(InstructionType.BRA,branchArgs);
 					ifThen.appendInstruction(i);
 				}
-				//TODO: handle phi instructions
+				
+				//Get the list of variables that were assigned in the banches
+				Set<String> changedVars = new HashSet<String>();
+				changedVars.addAll(ifThen.changedVariables);
+				if(!thenOnly)
+					changedVars.addAll(ifElse.changedVariables);
+				
+				//Create phi instructions
+				Map<String,Argument> newVarLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
+				for(String var : changedVars) {
+					Argument loc1 = ifThen.varLookupTable.get(var);
+					Argument loc2 = ifElse.varLookupTable.get(var);
+					
+					Argument[] args = {loc1,loc2};
+					Instruction i = new Instruction(InstructionType.PHI,args);
+					newVarLookupTable.put(var, i.instructionID);
+					afterIf.appendInstruction(i);
+				}
+				afterIf.varLookupTable = newVarLookupTable;
 				
 				currBB = afterIf;
 			} else if (curr instanceof While) {
@@ -255,19 +256,18 @@ public class Compiler {
 					next.prev = afterLoop;
 				
 				//Compile the condition for the while loop
-				BBID afterLoopID = new BBID(afterLoop.bbID);
-				compileCondition(currWhile.getCondition(),condition, afterLoopID);
+				compileCondition(currWhile.getCondition(),condition, afterLoop.bbID);
 				
 				//Compile loop block
 				compileIntoBBs(currWhile.getBlock(), loop);
 				
 				//Have the loop branch back to the condition
-				BBID conditionID = new BBID(condition.bbID);
-				Argument[] branchArgs = {conditionID};
+				Argument[] branchArgs = {condition.bbID};
 				Instruction i = new Instruction(InstructionType.BRA,branchArgs);
 				loop.appendInstruction(i);
-				
-				//TODO: handle phi instructions
+
+				//TODO: handle passing around var lookup table and phi instructions
+				System.out.println("Warning: while loop phis not implemented yet.");
 				
 				currBB = afterLoop;
 			} else if (curr instanceof Return) {
@@ -294,7 +294,7 @@ public class Compiler {
 		
 		RelationOperator o = c.getOperator();
 		Argument[] branchLocArr = {branchLocation};
-		InstructionType it = null;
+		InstructionType it;
 		switch(o) {
 		case EQUALS:
 			it = InstructionType.BNE;
@@ -315,6 +315,7 @@ public class Compiler {
 			it =InstructionType.BLT;
 			break;
 		default:
+			it = null;
 			System.out.println("Error unexpected comparision operator.");
 		}
 		Instruction i = new Instruction(it,branchLocArr);
@@ -326,39 +327,66 @@ public class Compiler {
 	 * Return value: instruction id that computed the final value
 	 */
 	public Argument compileExpression(Expression e, BasicBlock bb) {
-		Argument arg = null;
+		Argument arg;
 		if(e instanceof Binary) {
 			Binary eBin = (Binary) e;
 			
 			//Compile the two sides of the binary operator
 			Argument leftArg = compileExpression(eBin.getLeft(), bb);
 			Argument rightArg = compileExpression(eBin.getRight(), bb);
-			Argument[] args = {leftArg,rightArg};
-			
-			//Get the instruction type for the binary operator
 			BinaryOperator o = eBin.getOperator();
-			InstructionType it = null;
-			switch(o) {
-			case ADDITION:
-				it = InstructionType.ADD;
-				break;
-			case SUBTRACTION:
-				it = InstructionType.SUB;
-				break;
-			case MULTIPLICATION:
-				it = InstructionType.MUL;
-				break;
-			case DIVISION:
-				it = InstructionType.DIV;
-				break;
-			default:
-					System.out.println("Error unexpected binary operator.");
-			}
 			
-			//Combine the two sides of the expression with an instruction
-			Instruction i = new Instruction(it,args);
-			bb.appendInstruction(i);
-			arg = new InstructionID(i.instructionID);
+			if(leftArg instanceof Value && rightArg instanceof Value) {
+				int l = ((Value) leftArg).getValue();
+				int r = ((Value) rightArg).getValue();
+				
+				int exp;
+				switch(o) {
+				case ADDITION:
+					exp = l+r;
+					break;
+				case SUBTRACTION:
+					exp = l-r;
+					break;
+				case MULTIPLICATION:
+					exp = l*r;
+					break;
+				case DIVISION:
+					exp = l/r;
+					break;
+				default:
+					exp = Integer.MIN_VALUE;
+					System.out.println("Error unexpected binary operator.");
+				}
+				
+				arg = new Value(exp);
+			} else {
+				Argument[] args = {leftArg,rightArg};
+				
+				//Get the instruction type for the binary operator
+				InstructionType it = null;
+				switch(o) {
+				case ADDITION:
+					it = InstructionType.ADD;
+					break;
+				case SUBTRACTION:
+					it = InstructionType.SUB;
+					break;
+				case MULTIPLICATION:
+					it = InstructionType.MUL;
+					break;
+				case DIVISION:
+					it = InstructionType.DIV;
+					break;
+				default:
+						System.out.println("Error unexpected binary operator.");
+				}
+				
+				//Combine the two sides of the expression with an instruction
+				Instruction i = new Instruction(it,args);
+				bb.appendInstruction(i);
+				arg = i.instructionID;
+			}
 		} else if (e instanceof Number) {
 			Number eNum = (Number) e;
 			
@@ -370,8 +398,10 @@ public class Compiler {
 			//Create an argument list for the load
 			List<Argument> args = new ArrayList<Argument>();
 			args.add(new ArrayName(eDes.getName()));
-			for(Expression exp : eDes.getIndices()) {
-				args.add(compileExpression(exp,bb));
+			if(eDes.getIndices() != null) {
+				for(Expression exp : eDes.getIndices()) {
+					args.add(compileExpression(exp,bb));
+				}
 			}
 			Argument[] argsArr = new Argument[args.size()];
 			args.toArray(argsArr);
@@ -384,7 +414,7 @@ public class Compiler {
 					//Unknown variable
 					i = new Instruction(InstructionType.LOAD, argsArr);
 					bb.appendInstruction(i);
-					arg = new InstructionID(i.instructionID);
+					arg = i.instructionID;
 				} else {
 					//Known variable
 					arg = id;
@@ -393,23 +423,25 @@ public class Compiler {
 				//Array load
 				i = new Instruction(InstructionType.LOADADD, argsArr);
 				bb.appendInstruction(i);
-				arg = new InstructionID(i.instructionID);
+				arg = i.instructionID;
 			}
 		} else if (e instanceof FunctionCallExp) {
 			FunctionCallExp eFCE = (FunctionCallExp) e;
 			//TODO: handle function calls correctly
 			//Create an argument list for the function call
-			List<Argument> args = new ArrayList<Argument>();
+			List<Argument> args = new LinkedList<Argument>();
+			args.add(new FunctionName(eFCE.getName()));
 			for(Expression exp : eFCE.getArguments()) {
 				args.add(compileExpression(exp,bb));
 			}
 			
-			Argument[] argsArr = new Argument[1];
-			argsArr[0] = new FunctionName(eFCE.getName());
+			Argument[] argsArr = new Argument[args.size()];
+			args.toArray(argsArr);
 			Instruction i = new Instruction(InstructionType.FUNCTION,argsArr);
 			bb.appendInstruction(i);
-			arg = new InstructionID(i.instructionID);
+			arg = i.instructionID;
 		} else {
+			arg = null;
 			System.out.println("Error unexpected expression type.");
 		}
 		return arg;

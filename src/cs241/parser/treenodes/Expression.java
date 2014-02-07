@@ -84,12 +84,12 @@ public abstract class Expression {
 		ArrayList<Expression> arguments;
 		
 		public FunctionCallExp(String name) {
-			this(name, null);
+			this(name, new ArrayList<Expression>());
 		}
 		
 		public FunctionCallExp(String name, ArrayList<Expression> arguments) {
 			this.name = name;
-			this.arguments = arguments;
+			this.arguments = arguments == null ? new ArrayList<Expression>() : arguments;
 		}
 		
 		public String getName() {

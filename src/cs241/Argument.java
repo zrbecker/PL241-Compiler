@@ -13,11 +13,14 @@ public interface Argument {
 		public int hashCode() {
 			return 37*val;
 		}
+		public String toString() {
+			return "#" + val;
+		}
 	}
 	
-	public static class BBID implements Argument {
+	public static class BasicBlockID implements Argument {
 		private int bbID;
-		public BBID(int id) {
+		public BasicBlockID(int id) {
 			bbID = id;
 		}
 		public int getID() {
@@ -25,6 +28,9 @@ public interface Argument {
 		}
 		public int hashCode() {
 			return 31*bbID;
+		}
+		public String toString() {
+			return "BB." + bbID;
 		}
 	}
 	
@@ -39,6 +45,9 @@ public interface Argument {
 		public int hashCode() {
 			return 43*instructionID;
 		}
+		public String toString() {
+			return "Instruction." + instructionID;
+		}
 	}
 	
 	public static class ArrayName implements Argument {
@@ -52,6 +61,9 @@ public interface Argument {
 		public int hashCode() {
 			return name.hashCode();
 		}
+		public String toString() {
+			return "Arr." + name;
+		}
 	}
 	public static class FunctionName implements Argument {
 		private String name;
@@ -63,6 +75,9 @@ public interface Argument {
 		}
 		public int hashCode() {
 			return name.hashCode();
+		}
+		public String toString() {
+			return "Fun." + name;
 		}
 	}
 }

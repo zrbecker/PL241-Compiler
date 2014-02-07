@@ -3,6 +3,8 @@ package cs241;
 import java.util.HashMap;
 import java.util.Map;
 
+import cs241.Argument.InstructionID;
+
 public class Instruction {
 	public enum InstructionType {
 		NEG,
@@ -32,18 +34,15 @@ public class Instruction {
 	}
 
 	private static int nextInstructionID = 1;
-	private static Map<Integer,Instruction> idToInstruction = new HashMap<Integer,Instruction>();
+	private static Map<InstructionID,Instruction> idToInstruction = new HashMap<InstructionID,Instruction>();
 	
-	public static Instruction getInstructionByID(int id) {
+	public static Instruction getInstructionByID(InstructionID id) {
 		return idToInstruction.get(id);
-	}
-	public static int nextInstructionID() {
-		return nextInstructionID;
 	}
 	
 	InstructionType type;
 	Argument[] args;
-	int instructionID;
+	InstructionID instructionID;
 	public Instruction(InstructionType t, Argument[] a) {
 		type = t;
 		args = new Argument[a.length];
@@ -52,10 +51,11 @@ public class Instruction {
 		}
 
 		switch(t) {
+			case FUNCTION:
+				break;
 			case NEG:
 			case LOAD:
 			case BRA:
-			case FUNCTION:
 				assert(args.length == 1);
 				break;
 			case END:
@@ -72,7 +72,7 @@ public class Instruction {
 				assert(args.length == 2);
 				break;
 		}
-		instructionID = nextInstructionID;
+		instructionID = new InstructionID(nextInstructionID);
 		idToInstruction.put(instructionID, this);
 		nextInstructionID++;
 	}
@@ -85,5 +85,88 @@ public class Instruction {
 			pow*=107;
 		}
 		return hash;
+	}
+	
+	public String toString() {
+		String s = "\t" + instructionID +": ";
+		switch(type) {
+		case NEG:
+			s += "NEG ";
+			break;
+		case ADD:
+			s += "ADD ";
+			break;
+		case SUB:
+			s += "SUB ";
+			break;
+		case MUL:
+			s += "MUL ";
+			break;
+		case DIV:
+			s += "DIV ";
+			break;
+		case CMP:
+			s += "CMP ";
+			break;
+		case ADDA:
+			s += "ADDA ";
+			break;
+		case LOAD:
+			s += "LOAD ";
+			break;
+		case STORE:
+			s += "STORE ";
+			break;
+		case MOVE:
+			s += "MOVE ";
+			break;
+		case PHI:
+			s += "PHI ";
+			break;
+		case END:
+			s += "END ";
+			break;
+		case BRA:
+			s += "BRA ";
+			break;
+		case BNE:
+			s += "BNE ";
+			break;
+		case BEQ:
+			s += "BEQ ";
+			break;
+		case BLE:
+			s += "BLE ";
+			break;
+		case BLT:
+			s += "BLT ";
+			break;
+		case BGE:
+			s += "BGE ";
+			break;
+		case BGT:
+			s += "BGT";
+			break;
+		case READ:
+			s += "READ ";
+			break;
+		case WRITE:
+			s += "WRITE ";
+			break;
+		case WLN:
+			s += "WLN ";
+			break;
+		case LOADADD:
+			s += "LOADADD ";
+			break;
+		case FUNCTION:
+			s += "FUNCTION ";
+			break;
+		}
+		for(Argument arg : args) {
+			s += arg.toString() + " ";
+		}
+		s += "\n";
+		return s;
 	}
 }

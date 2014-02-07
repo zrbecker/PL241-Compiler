@@ -2,9 +2,13 @@ package cs241;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import cs241.Argument.BasicBlockID;
 
 /**`
  * Class to keep track of what code is in what basic block
@@ -22,12 +26,13 @@ public class BasicBlock {
 	
 	List<Instruction> instructions;
 	Map<String,Argument> varLookupTable;
-	int bbID;
+	Set<String> changedVariables;
+	BasicBlockID bbID;
 	
 	private static int nextBBID = 1;
-	private static Map<Integer,BasicBlock> idToBB = new HashMap<Integer,BasicBlock>();
+	private static Map<BasicBlockID,BasicBlock> idToBB = new HashMap<BasicBlockID,BasicBlock>();
 	
-	public static BasicBlock getBasicBlockByID(int id) {
+	public static BasicBlock getBasicBlockByID(BasicBlockID id) {
 		return idToBB.get(id);
 	}
 	public static int nextInstructionID() {
@@ -40,7 +45,8 @@ public class BasicBlock {
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
 		varLookupTable = new HashMap<String,Argument>();
-		bbID = nextBBID;
+		changedVariables = new HashSet<String>();
+		bbID = new BasicBlockID(nextBBID);
 		idToBB.put(bbID, this);
 		nextBBID++;
 	}
@@ -68,10 +74,25 @@ public class BasicBlock {
 	public void appendInstruction(Instruction i) {
 		instructions.add(i);
 	}
+	
 	public void setNext(BasicBlock n) {
 		next = n;
 	}
+	
 	public void setPrevious(BasicBlock p) {
 		next = p;
+	}
+	
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		
+		sb.append(bbID + ": \n");
+		for(Instruction i : instructions) {
+			sb.append(i.toString());
+		}
+		if(next != null)
+			sb.append(next.toString());
+		
+		return sb.toString();
 	}
 }
