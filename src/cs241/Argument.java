@@ -53,4 +53,16 @@ public interface Argument {
 			return name.hashCode();
 		}
 	}
+	public static class FunctionName implements Argument {
+		private String name;
+		public FunctionName(String n) {
+			name = n;
+		}
+		public String getName() {
+			return name;
+		}
+		public int hashCode() {
+			return name.hashCode();
+		}
+	}
 }

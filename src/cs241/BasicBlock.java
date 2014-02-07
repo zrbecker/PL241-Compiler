@@ -12,6 +12,7 @@ import java.util.Map;
 public class BasicBlock {
 	//Code structure
 	List<BasicBlock> children;
+	List<BasicBlock> parents;
 	BasicBlock next;
 	BasicBlock prev;
 	
@@ -35,6 +36,7 @@ public class BasicBlock {
 	
 	public BasicBlock() {
 		children = new ArrayList<BasicBlock>();
+		parents = new ArrayList<BasicBlock>();
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
 		varLookupTable = new HashMap<String,Argument>();
@@ -47,6 +49,10 @@ public class BasicBlock {
 		children.add(c);
 	}
 
+	public void addParent(BasicBlock p) {
+		parents.add(p);
+	}
+	
 	public void setDominator(BasicBlock d) {
 		dominator = d;
 	}

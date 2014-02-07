@@ -27,7 +27,8 @@ public class Instruction {
 		READ,
 		WRITE,
 		WLN,
-		LOADADD
+		LOADADD,//TODO: remove LOADADD
+		FUNCTION //TODO: remove FUNCTION
 	}
 
 	private static int nextInstructionID = 1;
@@ -54,6 +55,7 @@ public class Instruction {
 			case NEG:
 			case LOAD:
 			case BRA:
+			case FUNCTION:
 				assert(args.length == 1);
 				break;
 			case END:

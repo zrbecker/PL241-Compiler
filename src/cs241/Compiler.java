@@ -5,14 +5,13 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.Reader;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
+import cs241.Argument.ArrayName;
 import cs241.Argument.BBID;
+import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
-import cs241.Argument.ArrayName;
 import cs241.Instruction.InstructionType;
 import cs241.parser.Parser;
 import cs241.parser.ParserException;
@@ -90,60 +89,122 @@ public class Compiler {
 			} else if (curr instanceof FunctionCall) {
 				FunctionCall currFC = (FunctionCall) curr;
 				
+				BasicBlock call = new BasicBlock();
 				BasicBlock afterCall = new BasicBlock();
 				
-				//TODO: compile the function call
+				//Set up parent/child relationship
+				List<BasicBlock> oldChildren = currBB.children;
+				currBB.children = new ArrayList<BasicBlock>();
+				currBB.addChild(call);
+				call.addChild(afterCall);
+				afterCall.children = oldChildren;
+				
+				call.addParent(currBB);
+				afterCall.addParent(call);
+				for(BasicBlock child : oldChildren) {
+					child.parents.remove(currBB);
+					child.addParent(afterCall);
+				}
+				
+				//Set up dominator tree
+				currBB.addDominated(call);
+				call.addDominated(afterCall);
+				
+				call.setDominator(currBB);
+				afterCall.setDominator(call);
+				
+				//Set up linear instruction order linked list
+				BasicBlock next = currBB.next;
+				currBB.setNext(call);
+				call.setNext(afterCall);
+				afterCall.setNext(next);
+				call.setPrevious(currBB);
+				afterCall.setPrevious(call);
+				if(next != null)
+					next.setPrevious(afterCall);
+				
+				//TODO:handle function calls right
+				//Add the function call instruction
+				Argument[] arg = new Argument[1];
+				arg[0] = new FunctionName(currFC.getName());
+				call.appendInstruction(new Instruction(InstructionType.FUNCTION,arg));
+				
+				currBB = afterCall;
 				System.out.println("Error cannot call functions yet.");
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
-				//TODO: handle empty else block
-			
+				boolean thenOnly = currIf.getElseBlock() == null;
+
 				BasicBlock ifThen = new BasicBlock();
 				BasicBlock ifElse = new BasicBlock();
 				BasicBlock afterIf = new BasicBlock();
 				
-				//Set up parent/child relationship and dominator tree
+				//Set up parent/child relationship
 				List<BasicBlock> oldChildren = currBB.children;
 				currBB.children = new ArrayList<BasicBlock>();
 				currBB.addChild(ifThen);
-				currBB.addChild(ifElse);
+				if(!thenOnly)
+					currBB.addChild(ifElse);
 				ifThen.addChild(afterIf);
-				ifElse.addChild(afterIf);
+				if(!thenOnly)
+					ifElse.addChild(afterIf);
 				afterIf.children = oldChildren;
 				
+				ifThen.addParent(currBB);
+				if(!thenOnly)
+					ifElse.addParent(currBB);
+				afterIf.addParent(ifThen);
+				if(!thenOnly)
+					afterIf.addParent(ifElse);
+				for(BasicBlock child : oldChildren) {
+					child.parents.remove(currBB);
+					child.addParent(afterIf);
+				}
+				
+				//Set up dominator tree
 				currBB.addDominated(ifThen);
-				currBB.addDominated(ifElse);
+				if(!thenOnly)
+					currBB.addDominated(ifElse);
 				currBB.addDominated(afterIf);
 				
 				ifThen.setDominator(currBB);
-				ifElse.setDominator(currBB);
+				if(!thenOnly)
+					ifElse.setDominator(currBB);
 				afterIf.setDominator(currBB);
 				
+				//Set up linear instruction order linked list
 				BasicBlock next = currBB.next;
 				currBB.next = ifThen;
 				ifThen.prev = currBB;
-				ifThen.next = ifElse;
-				ifElse.prev = ifThen;
-				ifElse.next = afterIf;
-				afterIf.prev = ifElse;
+				if(thenOnly) {
+					ifThen.next = afterIf;
+					afterIf.prev = ifThen;
+				} else {
+					ifThen.next = ifElse;
+					ifElse.prev = ifThen;
+					ifElse.next = afterIf;
+					afterIf.prev = ifElse;
+				}
 				afterIf.next = next;
 				if(next != null)
 					next.prev = afterIf;
 
 				//Compile the condition for the if
-				BBID ifElseID = new BBID(ifElse.bbID);
-				compileCondition(currIf.getCondition(),currBB, ifElseID);
+				BBID branchID = new BBID(thenOnly ? afterIf.bbID : ifElse.bbID);
+				compileCondition(currIf.getCondition(),currBB, branchID);
 				
 				//Compile the branches
 				compileIntoBBs(currIf.getThenBlock(), ifThen);
-				compileIntoBBs(currIf.getElseBlock(), ifElse);
+				if(!thenOnly)
+					compileIntoBBs(currIf.getElseBlock(), ifElse);
 				
 				//Add the branch from the ifthen to after the ifelse
-				BBID afterIfID = new BBID(afterIf.bbID);
-				Argument[] branchArgs = {afterIfID};
-				Instruction i = new Instruction(InstructionType.BRA,branchArgs);
-				ifThen.appendInstruction(i);
-				
+				if(!thenOnly) {
+					BBID afterIfID = new BBID(afterIf.bbID);
+					Argument[] branchArgs = {afterIfID};
+					Instruction i = new Instruction(InstructionType.BRA,branchArgs);
+					ifThen.appendInstruction(i);
+				}
 				//TODO: handle phi instructions
 				
 				currBB = afterIf;
@@ -154,7 +215,7 @@ public class Compiler {
 				BasicBlock loop = new BasicBlock();
 				BasicBlock afterLoop = new BasicBlock();
 				
-				//Set up child relationship and dominator tree
+				//Set up parent/child relationship
 				List<BasicBlock> oldChildren = currBB.children;
 				currBB.children = new ArrayList<BasicBlock>();
 				currBB.addChild(condition);
@@ -163,6 +224,16 @@ public class Compiler {
 				loop.addChild(condition);
 				afterLoop.children = oldChildren;
 				
+				condition.addParent(currBB);
+				loop.addParent(condition);
+				afterLoop.addParent(condition);
+				condition.addParent(loop);
+				for(BasicBlock child : oldChildren) {
+					child.parents.remove(currBB);
+					child.addParent(afterLoop);
+				}
+				
+				//Set up dominator tree
 				currBB.addDominated(condition);
 				condition.addDominated(loop);
 				condition.addDominated(afterLoop);
@@ -171,6 +242,7 @@ public class Compiler {
 				loop.setDominator(condition);
 				afterLoop.setDominator(condition);
 				
+				//Set up linear instruction order linked list
 				BasicBlock next = currBB.next;
 				currBB.next = condition;
 				condition.prev = currBB;
@@ -201,6 +273,7 @@ public class Compiler {
 			} else if (curr instanceof Return) {
 				Return currReturn = (Return) curr;
 				//TODO: compile return statement
+				System.out.println("Error return statements not yet implemented.");
 			} else {
 				System.out.println("Error unexpected statement type.");
 			}
@@ -323,7 +396,19 @@ public class Compiler {
 				arg = new InstructionID(i.instructionID);
 			}
 		} else if (e instanceof FunctionCallExp) {
-			//TODO: handle function calls
+			FunctionCallExp eFCE = (FunctionCallExp) e;
+			//TODO: handle function calls correctly
+			//Create an argument list for the function call
+			List<Argument> args = new ArrayList<Argument>();
+			for(Expression exp : eFCE.getArguments()) {
+				args.add(compileExpression(exp,bb));
+			}
+			
+			Argument[] argsArr = new Argument[1];
+			argsArr[0] = new FunctionName(eFCE.getName());
+			Instruction i = new Instruction(InstructionType.FUNCTION,argsArr);
+			bb.appendInstruction(i);
+			arg = new InstructionID(i.instructionID);
 		} else {
 			System.out.println("Error unexpected expression type.");
 		}
