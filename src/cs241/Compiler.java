@@ -91,7 +91,7 @@ public class Compiler {
 				
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
-					String varName = currAssignment.getLeft().getName();
+					String varName = des.getName();
 					currBB.varLookupTable.put(varName, arg);
 					currBB.changedVariables.add(varName);
 				} else {
@@ -183,7 +183,7 @@ public class Compiler {
 					compileIntoBBs(currIf.getElseBlock(), ifElse);
 				
 				//Add the branch from the ifthen to after the ifelse
-				if(!thenOnly) {
+				if(!thenOnly) {//TODO: incorrect branching behaviour on nested ifs
 					Argument[] branchArgs = {afterIf.bbID};
 					Instruction i = new Instruction(InstructionType.BRA,branchArgs);
 					ifThen.appendInstruction(i);
@@ -407,6 +407,7 @@ public class Compiler {
 			args.toArray(argsArr);
 			
 			//Decide whether it is a known variable, unknown variable, or array load
+			//TODO: something is weird here
 			Instruction i = null;
 			if(argsArr.length == 1) {
 				Argument id = bb.varLookupTable.get(((ArrayName)argsArr[0]).getName());
