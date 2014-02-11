@@ -27,6 +27,7 @@ import cs241.parser.treenodes.Expression.Binary.BinaryOperator;
 import cs241.parser.treenodes.Expression.Designator;
 import cs241.parser.treenodes.Expression.FunctionCallExp;
 import cs241.parser.treenodes.Expression.Number;
+import cs241.parser.treenodes.Function;
 import cs241.parser.treenodes.Relation;
 import cs241.parser.treenodes.Relation.RelationOperator;
 import cs241.parser.treenodes.Statement;
@@ -54,14 +55,22 @@ public class Compiler {
 		if(c == null)
 			System.out.println("Parsing error. Terminating.");
 		
-		//TODO: worry about variable and function parts
+		//TODO: worry about variable and function param/variable parts
+		//Compile the functions present in the code
+		List<BasicBlock> functionBBs = new ArrayList<BasicBlock>();
+		if(c.getFunctions() != null) {
+			for(Function func : c.getFunctions()) {
+				List<Statement> funcBody = func.getBody();
+				BasicBlock funcHead = new BasicBlock();
+				compileIntoBBs(funcBody, funcHead);
+				functionBBs.add(funcHead);
+			}
+		}
 		
+		//Compile the main statement
 		List<Statement> mainCode = c.getBody();
-		compileIntoBBs(mainCode,mainRoot);
-		BasicBlock t = mainRoot;
-		while(t.next != null)
-			t = t.next;
-		t.appendInstruction(new Instruction(InstructionType.END,new Argument[0]));
+		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
+		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END,new Argument[0]));
 		
 		System.out.println(mainRoot);
 	}
@@ -80,7 +89,7 @@ public class Compiler {
 	/*
 	 * Compiles code into a basic block structure
 	 */
-	public void compileIntoBBs(List<Statement> code, BasicBlock currBB) {
+	public BasicBlock compileIntoBBs(List<Statement> code, BasicBlock currBB) {
 		for (Statement curr: code) {
 			if(curr instanceof Assignment) {
 				Assignment currAssignment = (Assignment) curr;
@@ -88,12 +97,12 @@ public class Compiler {
 				
 				//Compile the expression and implicitly assign the variable to arg
 				Argument arg = compileExpression(currAssignment.getRight(),currBB);
+				arg.var = des.getName();
 				
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
-					String varName = des.getName();
-					currBB.varLookupTable.put(varName, arg);
-					currBB.changedVariables.add(varName);
+					currBB.varLookupTable.put(arg.var, arg);
+					currBB.changedVariables.add(arg.var);
 				} else {
 					//TODO: handle arrays
 					System.out.println("Error cannot assign to arrays yet.");
@@ -112,7 +121,7 @@ public class Compiler {
 				//Add the function call instruction
 				Argument[] argsArr = new Argument[args.size()];
 				args.toArray(argsArr);
-				currBB.appendInstruction(new Instruction(InstructionType.FUNCTION,argsArr));
+				currBB.appendInstruction(Instruction.makeInstruction(InstructionType.FUNCTION,argsArr));
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
 				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
@@ -178,15 +187,12 @@ public class Compiler {
 				compileCondition(currIf.getCondition(),currBB, branchID);
 				
 				//Compile the branches
-				compileIntoBBs(currIf.getThenBlock(), ifThen);
-				if(!thenOnly)
-					compileIntoBBs(currIf.getElseBlock(), ifElse);
-				
+				BasicBlock lastIfThenBlock = compileIntoBBs(currIf.getThenBlock(), ifThen);
+				BasicBlock lastIfElseBlock = ifElse;
 				//Add the branch from the ifthen to after the ifelse
-				if(!thenOnly) {//TODO: incorrect branching behaviour on nested ifs
-					Argument[] branchArgs = {afterIf.bbID};
-					Instruction i = new Instruction(InstructionType.BRA,branchArgs);
-					ifThen.appendInstruction(i);
+				if(!thenOnly) {
+					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.bbID));
+					lastIfElseBlock = compileIntoBBs(currIf.getElseBlock(), ifElse);
 				}
 				
 				//Get the list of variables that were assigned in the banches
@@ -201,12 +207,15 @@ public class Compiler {
 					Argument loc1 = ifThen.varLookupTable.get(var);
 					Argument loc2 = ifElse.varLookupTable.get(var);
 					
-					Argument[] args = {loc1,loc2};
-					Instruction i = new Instruction(InstructionType.PHI,args);
+					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
 					newVarLookupTable.put(var, i.instructionID);
 					afterIf.appendInstruction(i);
 				}
+				
+				//Set up the right variable lookups and changed variable list
 				afterIf.varLookupTable = newVarLookupTable;
+				changedVars.addAll(currBB.changedVariables);
+				afterIf.changedVariables = changedVars;
 				
 				currBB = afterIf;
 			} else if (curr instanceof While) {
@@ -259,15 +268,30 @@ public class Compiler {
 				compileCondition(currWhile.getCondition(),condition, afterLoop.bbID);
 				
 				//Compile loop block
-				compileIntoBBs(currWhile.getBlock(), loop);
+				BasicBlock lastLoopBlock = compileIntoBBs(currWhile.getBlock(), loop);
 				
 				//Have the loop branch back to the condition
-				Argument[] branchArgs = {condition.bbID};
-				Instruction i = new Instruction(InstructionType.BRA,branchArgs);
-				loop.appendInstruction(i);
+				lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.bbID));
 
-				//TODO: handle passing around var lookup table and phi instructions
-				System.out.println("Warning: while loop phis not implemented yet.");
+				//TODO: remove println
+				System.out.println("Warning: while loop phis not fully implemented yet.");
+
+				//Set up the phi instructions and variable lookup table
+				Set<String> changedVars = new HashSet<String>();
+				changedVars.addAll(lastLoopBlock.changedVariables);
+				Map<String,Argument> newVarLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
+				for(String var : changedVars) {
+					Argument loc1 = lastLoopBlock.varLookupTable.get(var);
+					Argument loc2 = currBB.varLookupTable.get(var);
+					
+					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
+					newVarLookupTable.put(var, i.instructionID);
+					condition.prependInstruction(i);
+					//TODO: fixup old references to loc2,var in the loop
+				}
+				changedVars.addAll(currBB.changedVariables);
+				afterLoop.changedVariables = changedVars;
+				afterLoop.varLookupTable = newVarLookupTable;
 				
 				currBB = afterLoop;
 			} else if (curr instanceof Return) {
@@ -278,6 +302,7 @@ public class Compiler {
 				System.out.println("Error unexpected statement type.");
 			}
 		}
+		return currBB;
 	}
 	/*
 	 * Compile a condition into instructions, will branch on false to branchLocation
@@ -287,13 +312,10 @@ public class Compiler {
 		//Compile the two sides of the condition
 		Argument idLeft = compileExpression(c.getLeft(),bb);
 		Argument idRight = compileExpression(c.getRight(),bb);
-		Argument[] cmpArgs = {idLeft,idRight};
 		
-		Instruction compare = new Instruction(InstructionType.CMP,cmpArgs);
-		bb.appendInstruction(compare);
+		bb.appendInstruction(Instruction.makeInstruction(InstructionType.CMP,idLeft,idRight));
 		
 		RelationOperator o = c.getOperator();
-		Argument[] branchLocArr = {branchLocation};
 		InstructionType it;
 		switch(o) {
 		case EQUALS:
@@ -318,8 +340,7 @@ public class Compiler {
 			it = null;
 			System.out.println("Error unexpected comparision operator.");
 		}
-		Instruction i = new Instruction(it,branchLocArr);
-		bb.appendInstruction(i);
+		bb.appendInstruction(Instruction.makeInstruction(it,branchLocation));
 	}
 	
 	/*
@@ -330,117 +351,17 @@ public class Compiler {
 		Argument arg;
 		if(e instanceof Binary) {
 			Binary eBin = (Binary) e;
-			
-			//Compile the two sides of the binary operator
-			Argument leftArg = compileExpression(eBin.getLeft(), bb);
-			Argument rightArg = compileExpression(eBin.getRight(), bb);
-			BinaryOperator o = eBin.getOperator();
-			
-			if(leftArg instanceof Value && rightArg instanceof Value) {
-				int l = ((Value) leftArg).getValue();
-				int r = ((Value) rightArg).getValue();
-				
-				int exp;
-				switch(o) {
-				case ADDITION:
-					exp = l+r;
-					break;
-				case SUBTRACTION:
-					exp = l-r;
-					break;
-				case MULTIPLICATION:
-					exp = l*r;
-					break;
-				case DIVISION:
-					exp = l/r;
-					break;
-				default:
-					exp = Integer.MIN_VALUE;
-					System.out.println("Error unexpected binary operator.");
-				}
-				
-				arg = new Value(exp);
-			} else {
-				Argument[] args = {leftArg,rightArg};
-				
-				//Get the instruction type for the binary operator
-				InstructionType it = null;
-				switch(o) {
-				case ADDITION:
-					it = InstructionType.ADD;
-					break;
-				case SUBTRACTION:
-					it = InstructionType.SUB;
-					break;
-				case MULTIPLICATION:
-					it = InstructionType.MUL;
-					break;
-				case DIVISION:
-					it = InstructionType.DIV;
-					break;
-				default:
-						System.out.println("Error unexpected binary operator.");
-				}
-				
-				//Combine the two sides of the expression with an instruction
-				Instruction i = new Instruction(it,args);
-				bb.appendInstruction(i);
-				arg = i.instructionID;
-			}
+			arg = compileBinaryExpression(eBin, bb);
 		} else if (e instanceof Number) {
 			Number eNum = (Number) e;
-			
 			//Numbers do not need any compilation
-			arg = new Value(eNum.getValue());
+			arg = new Value(eNum.getValue(), "#");
 		} else if (e instanceof Designator) {
 			Designator eDes = (Designator)e;
-			
-			//Create an argument list for the load
-			List<Argument> args = new ArrayList<Argument>();
-			args.add(new ArrayName(eDes.getName()));
-			if(eDes.getIndices() != null) {
-				for(Expression exp : eDes.getIndices()) {
-					args.add(compileExpression(exp,bb));
-				}
-			}
-			Argument[] argsArr = new Argument[args.size()];
-			args.toArray(argsArr);
-			
-			//Decide whether it is a known variable, unknown variable, or array load
-			//TODO: something is weird here
-			Instruction i = null;
-			if(argsArr.length == 1) {
-				Argument id = bb.varLookupTable.get(((ArrayName)argsArr[0]).getName());
-				if(id == null) {
-					//Unknown variable
-					i = new Instruction(InstructionType.LOAD, argsArr);
-					bb.appendInstruction(i);
-					arg = i.instructionID;
-				} else {
-					//Known variable
-					arg = id;
-				}
-			} else {
-				//Array load
-				i = new Instruction(InstructionType.LOADADD, argsArr);
-				bb.appendInstruction(i);
-				arg = i.instructionID;
-			}
+			arg = compileDesignator(eDes, bb);
 		} else if (e instanceof FunctionCallExp) {
 			FunctionCallExp eFCE = (FunctionCallExp) e;
-			//TODO: handle function calls correctly
-			//Create an argument list for the function call
-			List<Argument> args = new LinkedList<Argument>();
-			args.add(new FunctionName(eFCE.getName()));
-			for(Expression exp : eFCE.getArguments()) {
-				args.add(compileExpression(exp,bb));
-			}
-			
-			Argument[] argsArr = new Argument[args.size()];
-			args.toArray(argsArr);
-			Instruction i = new Instruction(InstructionType.FUNCTION,argsArr);
-			bb.appendInstruction(i);
-			arg = i.instructionID;
+			arg = compileFunctionCallExp(eFCE, bb);
 		} else {
 			arg = null;
 			System.out.println("Error unexpected expression type.");
@@ -448,5 +369,123 @@ public class Compiler {
 		return arg;
 	}
 	
+	public Argument compileBinaryExpression(Binary bin, BasicBlock bb) {
+		//Compile the two sides of the binary operator
+		Argument leftArg = compileExpression(bin.getLeft(), bb);
+		Argument rightArg = compileExpression(bin.getRight(), bb);
+		BinaryOperator o = bin.getOperator();
+		
+		Argument arg = null;//TODO: value propogation temporarily disabled
+		if(false && leftArg instanceof Value && rightArg instanceof Value) {
+			int l = ((Value) leftArg).getValue();
+			int r = ((Value) rightArg).getValue();
+			
+			int exp;
+			switch(o) {
+			case ADDITION:
+				exp = l+r;
+				break;
+			case SUBTRACTION:
+				exp = l-r;
+				break;
+			case MULTIPLICATION:
+				exp = l*r;
+				break;
+			case DIVISION:
+				exp = l/r;
+				break;
+			default:
+				exp = Integer.MIN_VALUE;
+				System.out.println("Error unexpected binary operator.");
+			}
+			
+			arg = new Value(exp,"#");
+		} else {
+			//Get the instruction type for the binary operator
+			InstructionType it = null;
+			switch(o) {
+			case ADDITION:
+				it = InstructionType.ADD;
+				break;
+			case SUBTRACTION:
+				it = InstructionType.SUB;
+				break;
+			case MULTIPLICATION:
+				it = InstructionType.MUL;
+				break;
+			case DIVISION:
+				it = InstructionType.DIV;
+				break;
+			default:
+					System.out.println("Error unexpected binary operator.");
+			}
+			
+			//Combine the two sides of the expression with an instruction
+			Instruction i = Instruction.makeInstruction(it,leftArg,rightArg);
+			bb.appendInstruction(i);
+			arg = i.instructionID;
+		}
+		return arg;
+	}
 
+	public Argument compileDesignator(Designator des, BasicBlock bb) {
+		//Create an argument list for the load
+		List<Argument> args = new ArrayList<Argument>();
+		args.add(new ArrayName(des.getName()));
+		if(des.getIndices() != null) {
+			for(Expression exp : des.getIndices()) {
+				args.add(compileExpression(exp,bb));
+			}
+		}
+		Argument[] argsArr = new Argument[args.size()];
+		args.toArray(argsArr);
+		
+		//Decide whether it is a known variable, unknown variable, or array load
+		//TODO: something is weird here need to think more about behavior
+		Instruction i = null;
+		if(argsArr.length == 1) {
+			Argument id = bb.varLookupTable.get(((ArrayName)argsArr[0]).getName());
+			if(id == null) {
+				//Unknown variable
+				i = Instruction.makeInstruction(InstructionType.LOAD, des.getName(), argsArr);
+				bb.appendInstruction(i);
+				return i.instructionID;
+			} else {
+				//Known variable
+				return id;
+			}
+		} else {
+			//Array load
+			i = Instruction.makeInstruction(InstructionType.LOADADD, des.getName(), argsArr);
+			bb.appendInstruction(i);
+			return i.instructionID;
+		}
+	}
+	
+	public Argument compileFunctionCallExp(FunctionCallExp fce, BasicBlock bb) {
+		//TODO: handle function calls correctly
+		//Create an argument list for the function call
+		List<Argument> args = new LinkedList<Argument>();
+		args.add(new FunctionName(fce.getName()));
+		for(Expression exp : fce.getArguments()) {
+			args.add(compileExpression(exp,bb));
+		}
+		
+		Argument[] argsArr = new Argument[args.size()];
+		args.toArray(argsArr);
+		Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION,argsArr);
+		bb.appendInstruction(i);
+		return i.instructionID;
+	}
+	
+	//TODO: implement this function
+	public Argument[] compileArgsToArray(List<Expression> exps, Argument first, BasicBlock bb) {
+		List<Argument> args = new LinkedList<Argument>();
+		args.add(first);
+		for(Expression exp : exps) {
+			args.add(compileExpression(exp,bb));
+		}
+		Argument[] argsArr = new Argument[args.size()];
+		return args.toArray(argsArr);
+	}
 }

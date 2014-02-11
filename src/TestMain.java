@@ -5,7 +5,7 @@ import cs241.Compiler;
 
 public class TestMain {
 	public static void main(String[] args) {
-		File inFile = new File("./programs/test007.txt");
+		File inFile = new File("./programs/test009.txt");
 		File outFile = null;
 		Compiler comp = new Compiler(inFile,outFile);
 		try {
