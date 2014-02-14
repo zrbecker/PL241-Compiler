@@ -29,7 +29,7 @@ public abstract class Argument {
 	}
 	
 	public boolean equals(Argument a) {
-		return this.getClass().getName().equals(a.getClass().getName());// && var.equals(a.var);
+		return this.getClass().getName().equals(a.getClass().getName());
 	}
 	
 	public String toString() {
@@ -43,7 +43,6 @@ public abstract class Argument {
 	public static class Value extends Argument {
 		private int val;
 		public Value(int v) {
-			super("");
 			val = v;
 		}
 		public Value(int v, String var) {
@@ -58,14 +57,14 @@ public abstract class Argument {
 		}
 		
 		public boolean equals(Value v) {
-			return val == v.val && super.equals(v);
+			return val == v.val;
 		}
 		
 		public String toString() {
 			return super.toString() + "#." + val;
 		}
 		public Argument clone() {
-			return new Value(val);
+			return new Value(val,this.getVariable());
 		}
 	}
 	
@@ -81,7 +80,7 @@ public abstract class Argument {
 			return 31*bbID + super.hashCode();
 		}
 		public boolean equals(BasicBlockID id) {
-			return bbID == id.bbID && super.equals(id);
+			return bbID == id.bbID;
 		}
 		public String toString() {
 			return super.toString() + "BB." + bbID;
@@ -104,7 +103,7 @@ public abstract class Argument {
 			return 43*instructionID + super.hashCode();
 		}
 		public boolean equals(InstructionID id) {
-			return instructionID == id.instructionID && super.equals(id);
+			return instructionID == id.instructionID;
 		}
 		public String toString() {
 			return super.toString() + "Instruction." + instructionID;
@@ -126,7 +125,7 @@ public abstract class Argument {
 			return name.hashCode() + super.hashCode();
 		}
 		public boolean equals(DesName dn) {
-			return name.equals(dn.name) && super.equals(dn);
+			return name.equals(dn.name);
 		}
 		public String toString() {
 			return super.toString() + "Des." + name;
@@ -147,7 +146,7 @@ public abstract class Argument {
 			return name.hashCode() + super.hashCode();
 		}
 		public boolean equals(FunctionName fn) {
-			return name.equals(fn.name) && super.equals(fn);
+			return name.equals(fn.name);
 		}
 		public String toString() {
 			return super.toString() + "Func." + name;

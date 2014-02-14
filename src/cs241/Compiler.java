@@ -53,8 +53,10 @@ public class Compiler {
 
 	public void compile() throws FileNotFoundException {
 		Computation c = getParseTree();
-		if(c == null)
+		if(c == null) {
 			System.out.println("Parsing error. Terminating.");
+			return;
+		}
 		
 		//TODO: worry about variable and function param/variable parts
 		//Compile the functions present in the code
@@ -102,9 +104,10 @@ public class Compiler {
 				
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
-					//Implicit load instruction to make a def
+					//Implicit store instruction to make a def
 					Instruction i = Instruction.makeInstruction(InstructionType.STORE, arg);
-					//currBB.appendInstruction(i);
+					//Note that there is no append to the basic block
+					
 					currBB.updateVariable(var, arg, i.getID());
 				} else {
 					//TODO: handle arrays correctly
@@ -166,21 +169,21 @@ public class Compiler {
 				afterIf.setDominator(currBB);
 				
 				//Set up linear instruction order linked list
-				BasicBlock next = currBB.next;
-				currBB.next = ifThen;
-				ifThen.prev = currBB;
+				BasicBlock next = currBB.getNext();
+				currBB.setNext(ifThen);
+				ifThen.setPrevious(currBB);
 				if(thenOnly) {
-					ifThen.next = afterIf;
-					afterIf.prev = ifThen;
+					ifThen.setNext(afterIf);
+					afterIf.setPrevious(ifThen);
 				} else {
-					ifThen.next = ifElse;
-					ifElse.prev = ifThen;
-					ifElse.next = afterIf;
-					afterIf.prev = ifElse;
+					ifThen.setNext(ifElse);
+					ifElse.setPrevious(ifThen);
+					ifElse.setNext(afterIf);
+					afterIf.setPrevious(ifElse);
 				}
-				afterIf.next = next;
+				afterIf.setNext(next);
 				if(next != null)
-					next.prev = afterIf;
+					next.setPrevious(afterIf);
 
 				//Compile the condition for the if
 				BasicBlockID branchID = thenOnly ? afterIf.getID() : ifElse.getID();
@@ -189,14 +192,13 @@ public class Compiler {
 				//Compile the branches
 				BasicBlock lastIfThenBlock = compileIntoBBs(currIf.getThenBlock(), ifThen);
 				BasicBlock lastIfElseBlock = ifElse;
-				
-				//Add the branch from the ifthen to after the ifelse
 				if(!thenOnly) {
+					//Add the branch from the ifthen to after the ifelse
 					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.getID()));
 					lastIfElseBlock = compileIntoBBs(currIf.getElseBlock(), ifElse);
 				}
 				
-				//Get the list of variables that were assigned in the banches
+				//Get the list of variables that were assigned in the branches
 				Set<String> changedVars = new HashSet<String>();
 				changedVars.addAll(lastIfThenBlock.getChangedVars());
 				if(!thenOnly)
@@ -211,6 +213,7 @@ public class Compiler {
 					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 					afterIf.updateVariable(var, i.getID(), i.getID());
 					afterIf.appendInstruction(i);
+					addPossibleUse(afterIf, i.getID(), loc1, loc2);
 				}
 				
 				currBB = afterIf;
@@ -251,16 +254,16 @@ public class Compiler {
 				afterLoop.setDominator(condition);
 				
 				//Set up linear instruction order linked list
-				BasicBlock next = currBB.next;
-				currBB.next = condition;
-				condition.prev = currBB;
-				condition.next = loop;
-				loop.prev = condition;
-				loop.next = afterLoop;
-				afterLoop.prev = loop;
-				afterLoop.next = next;
+				BasicBlock next = currBB.getNext();
+				currBB.setNext(condition);
+				condition.setPrevious(currBB);
+				condition.setNext(loop);
+				loop.setPrevious(condition);
+				loop.setNext(afterLoop);
+				afterLoop.setPrevious(loop);
+				afterLoop.setNext(next);
 				if(next != null)
-					next.prev = afterLoop;
+					next.setPrevious(afterLoop);
 				
 				//Compile the condition for the while loop
 				compileCondition(currWhile.getCondition(),condition, afterLoop.getID());
@@ -277,11 +280,13 @@ public class Compiler {
 					Argument loc1 = lastLoopBlock.getVarArg(var);
 					Argument loc2 = currBB.getVarArg(var);
 					
-					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
-					afterLoop.updateVariable(var, i.getID(), i.getID());
+					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
 					condition.prependInstruction(i);
+					afterLoop.updateVariable(var, i.getID(), i.getID());
 					//Fix up old references in the loop that should actually point to phi
-					replaceRefs(loop, var, currBB.getVarDef(var), loc2, i.getID(), currBB.getID());
+					replaceRefs(var, currBB.getVarDef(var), loc2, i.getID(), currBB.getID());
+					//Only add the phi as a possible use after the replacement
+					addPossibleUse(condition, i.getID(), loc1, loc2);
 				}
 				
 				currBB = afterLoop;
@@ -306,8 +311,7 @@ public class Compiler {
 		
 		Instruction i = Instruction.makeInstruction(InstructionType.CMP,idLeft,idRight);
 		bb.appendInstruction(i);
-		addPossibleUse(idLeft, bb, i.getID());
-		addPossibleUse(idRight, bb, i.getID());
+		addPossibleUse(bb, i.getID(), idLeft, idRight);
 		
 		RelationOperator o = c.getOperator();
 		InstructionType it;
@@ -369,60 +373,30 @@ public class Compiler {
 		Argument rightArg = compileExpression(bin.getRight(), bb);
 		BinaryOperator o = bin.getOperator();
 		
-		Argument arg = null;//TODO: value propagation temporarily disabled
-//		if(leftArg instanceof Value && rightArg instanceof Value) {
-//			int l = ((Value) leftArg).getValue();
-//			int r = ((Value) rightArg).getValue();
-//			
-//			int exp;
-//			switch(o) {
-//			case ADDITION:
-//				exp = l+r;
-//				break;
-//			case SUBTRACTION:
-//				exp = l-r;
-//				break;
-//			case MULTIPLICATION:
-//				exp = l*r;
-//				break;
-//			case DIVISION:
-//				exp = l/r;
-//				break;
-//			default:
-//				exp = Integer.MIN_VALUE;
-//				System.out.println("Error unexpected binary operator.");
-//			}
-//			
-//			arg = new Value(exp);
-//		} else {
-			//Get the instruction type for the binary operator
-			InstructionType it = null;
-			switch(o) {
-			case ADDITION:
-				it = InstructionType.ADD;
-				break;
-			case SUBTRACTION:
-				it = InstructionType.SUB;
-				break;
-			case MULTIPLICATION:
-				it = InstructionType.MUL;
-				break;
-			case DIVISION:
-				it = InstructionType.DIV;
-				break;
-			default:
-					System.out.println("Error unexpected binary operator.");
-			}
-			
-			//Combine the two sides of the expression with an instruction
-			Instruction i = Instruction.makeInstruction(it,leftArg,rightArg);
-			bb.appendInstruction(i);
-			arg = i.getID();
-			
-			//TODO may have an issue with value propagation
-			addPossibleUse(leftArg,bb,i.getID());
-			addPossibleUse(rightArg,bb,i.getID());
-//		}
+		//Get the instruction type for the binary operator
+		InstructionType it = null;
+		switch(o) {
+		case ADDITION:
+			it = InstructionType.ADD;
+			break;
+		case SUBTRACTION:
+			it = InstructionType.SUB;
+			break;
+		case MULTIPLICATION:
+			it = InstructionType.MUL;
+			break;
+		case DIVISION:
+			it = InstructionType.DIV;
+			break;
+		default:
+				System.out.println("Error unexpected binary operator.");
+		}
+		
+		//Combine the two sides of the expression with an instruction
+		Instruction i = Instruction.makeInstruction(it,leftArg,rightArg);
+		bb.appendInstruction(i);
+		Argument arg = i.getID();
+		addPossibleUse(bb, i.getID(), leftArg, rightArg);
 		return arg;
 	}
 
@@ -435,7 +409,7 @@ public class Compiler {
 		//Decide whether it is a known variable, unknown variable, or array load
 		Instruction i = null;
 		if(args.length == 1) {
-			Argument id = bb.getVarDef(var);
+			Argument id = bb.getVarArg(var);
 			if(id == null) {
 				//Unknown variable
 				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
@@ -443,12 +417,9 @@ public class Compiler {
 				return i.getID();
 			} else {
 				//Known variable
-				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
-				bb.appendInstruction(i);
-				
-				//Make sure the instruction id points to the right variable
-				id = id.clone();
-				id.setVariable(var);
+				//Make sure the instruction id points to the right variable for DefUse purposes
+				//id = id.clone();
+				//id.setVariable(var);
 				
 				return id;
 			}
@@ -456,9 +427,7 @@ public class Compiler {
 			//Array load
 			i = Instruction.makeInstruction(InstructionType.LOADADD, var, args);
 			bb.appendInstruction(i);
-			for(Argument arg : args) {
-				addPossibleUse(arg,bb,i.getID());
-			}
+			addPossibleUse(bb,i.getID(),args);
 			return i.getID();
 		}
 	}
@@ -472,9 +441,7 @@ public class Compiler {
 		Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION,args);
 		bb.appendInstruction(i);
 		
-		for(Argument arg : args) {
-			addPossibleUse(arg,bb,i.getID());
-		}
+		addPossibleUse(bb,i.getID(),args);
 		
 		return i.getID();
 	}
@@ -496,7 +463,7 @@ public class Compiler {
 	 * Replace all references to an argument with a different argument.
 	 * Should only be used on while blocks.
 	 */
-	public void replaceRefs(BasicBlock bb, String var, InstructionID def, Argument oldArg, Argument newArg, BasicBlockID stop) {
+	public void replaceRefs(String var, InstructionID def, Argument oldArg, Argument newArg, BasicBlockID stop) {
 		//Get the most recent use of var
 		DefUse use = duchain.getMostRecentDefUse(var);
 		
@@ -514,10 +481,12 @@ public class Compiler {
 		}
 	}
 	
-	public void addPossibleUse(Argument arg, BasicBlock bb, InstructionID id) {
-		if(arg.hasVariable()) {
-			String v = arg.getVariable();
-			duchain.addDefUse(v, bb.getVarDef(v), bb.getVarArg(v), id, bb.getID());
+	public void addPossibleUse(BasicBlock bb, InstructionID id, Argument... args) {
+		for(Argument arg : args) {
+			if(arg.hasVariable()) {
+				String v = arg.getVariable();
+				duchain.addDefUse(v, bb.getVarDef(v), bb.getVarArg(v), id, bb.getID());
+			}
 		}
 	}
 }

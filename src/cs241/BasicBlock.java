@@ -18,8 +18,8 @@ public class BasicBlock {
 	//Code structure
 	List<BasicBlock> children;
 	List<BasicBlock> parents;
-	BasicBlock next;
-	BasicBlock prev;
+	private BasicBlock next;
+	private BasicBlock prev;
 	
 	//Dominator tree
 	BasicBlock dominator;
@@ -80,21 +80,31 @@ public class BasicBlock {
 		instructions.add(i);
 	}
 	
+	public BasicBlock getNext() {
+		return next;
+	}
+	
 	public void setNext(BasicBlock n) {
 		next = n;
 	}
 	
+	public BasicBlock getPrev() {
+		return prev;
+	}
+	
 	public void setPrevious(BasicBlock p) {
-		next = p;
+		prev = p;
 	}
 	
 	public BasicBlockID getID() {
 		return bbID;
 	}
 	
-	public void updateVariable(String var, Argument arg, InstructionID id) {
+	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
+		arg = arg.clone();
+		arg.setVariable(var);
 		varLookupTable.put(var, arg);
-		varDefTable.put(var, id);
+		varDefTable.put(var, defInstructionID);
 		changedVariables.add(var);
 	}
 	
