@@ -41,7 +41,7 @@ public class Instruction {
 	}
 	
 	public static Instruction makeInstruction(InstructionType t, Argument... args) {
-		return new Instruction(t,args);
+		return new Instruction(t,"",args);
 	}
 	
 	public static Instruction makeInstruction(InstructionType t, String s, Argument... args) {
@@ -51,10 +51,7 @@ public class Instruction {
 	InstructionType type;
 	Argument[] args;
 	InstructionID instructionID;
-	public Instruction(InstructionType t, Argument[] a) {
-		this(t, "", a);
-	}
-	public Instruction(InstructionType t, String s, Argument[] a) {
+	private Instruction(InstructionType t, String s, Argument[] a) {
 		type = t;
 		args = new Argument[a.length];
 		for(int i = 0; i < a.length; i++) {
@@ -87,7 +84,7 @@ public class Instruction {
 		idToInstruction.put(instructionID, this);
 		nextInstructionID++;
 	}
-
+	
 	public int hashCode() {
 		int hash = type.hashCode();
 		int pow = 107;

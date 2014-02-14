@@ -9,14 +9,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
-import cs241.Argument.ArrayName;
 import cs241.Argument.BasicBlockID;
+import cs241.Argument.DesName;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
+import cs241.DefUseChain.DefUse;
 import cs241.Instruction.InstructionType;
 import cs241.parser.Parser;
 import cs241.parser.ParserException;
@@ -40,14 +40,16 @@ import cs241.parser.treenodes.Statement.While;
 public class Compiler {
 	File inputFile;
 	File outputFile;
-	BasicBlock mainRoot;
 	Parser parser;
+	BasicBlock mainRoot;
+	DefUseChain duchain;
 
 	public Compiler(File in, File out) {
-		mainRoot = new BasicBlock();
 		inputFile = in;
 		outputFile = out;
 		parser = new Parser();
+		mainRoot = new BasicBlock();
+		duchain = new DefUseChain();
 	}
 
 	public void compile() throws FileNotFoundException {
@@ -97,14 +99,18 @@ public class Compiler {
 				
 				//Compile the expression and implicitly assign the variable to arg
 				Argument arg = compileExpression(currAssignment.getRight(),currBB);
-				arg.var = des.getName();
+				String var = des.getName();
 				
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
-					currBB.varLookupTable.put(arg.var, arg);
-					currBB.changedVariables.add(arg.var);
+					Instruction i = Instruction.makeInstruction(InstructionType.STORE, arg);
+					currBB.appendInstruction(i);//TODO: remove this append to use the instruction implicitly
+					currBB.updateVariable(var, arg, i.instructionID);
 				} else {
-					//TODO: handle arrays
+					//TODO: handle arrays correctly
+					Argument[] args = compileArgsToArray(des.getIndices(), new DesName(des.getName()), currBB);
+					currBB.appendInstruction(Instruction.makeInstruction(InstructionType.STORE, args));
+					
 					System.out.println("Error cannot assign to arrays yet.");
 				}
 			} else if (curr instanceof FunctionCall) {
@@ -112,24 +118,18 @@ public class Compiler {
 	
 				//TODO:handle function calls right
 				//Compile arguments to the function
-				List<Argument> args = new LinkedList<Argument>();
-				args.add(new FunctionName(currFC.getName()));
-				for(Expression exp : currFC.getArguments()) {
-					args.add(compileExpression(exp,currBB));
-				}
-				
-				//Add the function call instruction
-				Argument[] argsArr = new Argument[args.size()];
-				args.toArray(argsArr);
-				currBB.appendInstruction(Instruction.makeInstruction(InstructionType.FUNCTION,argsArr));
+				Argument[] args = compileArgsToArray(currFC.getArguments(), new FunctionName(currFC.getName()), currBB);
+
+				//Add the faked function call instruction
+				currBB.appendInstruction(Instruction.makeInstruction(InstructionType.FUNCTION, args));
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
 				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
 
 				BasicBlock ifThen = new BasicBlock();
-				ifThen.varLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
+				ifThen.copyVarTablesFrom(currBB);
 				BasicBlock ifElse = new BasicBlock();
-				ifElse.varLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
+				ifElse.copyVarTablesFrom(currBB);
 				BasicBlock afterIf = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -189,6 +189,7 @@ public class Compiler {
 				//Compile the branches
 				BasicBlock lastIfThenBlock = compileIntoBBs(currIf.getThenBlock(), ifThen);
 				BasicBlock lastIfElseBlock = ifElse;
+				
 				//Add the branch from the ifthen to after the ifelse
 				if(!thenOnly) {
 					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.bbID));
@@ -197,32 +198,29 @@ public class Compiler {
 				
 				//Get the list of variables that were assigned in the banches
 				Set<String> changedVars = new HashSet<String>();
-				changedVars.addAll(ifThen.changedVariables);
+				changedVars.addAll(lastIfThenBlock.changedVariables);
 				if(!thenOnly)
-					changedVars.addAll(ifElse.changedVariables);
+					changedVars.addAll(lastIfElseBlock.changedVariables);
 				
 				//Create phi instructions
-				Map<String,Argument> newVarLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
+				afterIf.copyAllTablesFrom(currBB);
 				for(String var : changedVars) {
-					Argument loc1 = ifThen.varLookupTable.get(var);
-					Argument loc2 = ifElse.varLookupTable.get(var);
+					Argument loc1 = lastIfThenBlock.varLookupTable.get(var);
+					Argument loc2 = lastIfElseBlock.varLookupTable.get(var);
 					
-					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
-					newVarLookupTable.put(var, i.instructionID);
+					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
+					afterIf.updateVariable(var, i.instructionID, i.instructionID);
 					afterIf.appendInstruction(i);
 				}
-				
-				//Set up the right variable lookups and changed variable list
-				afterIf.varLookupTable = newVarLookupTable;
-				changedVars.addAll(currBB.changedVariables);
-				afterIf.changedVariables = changedVars;
 				
 				currBB = afterIf;
 			} else if (curr instanceof While) {
 				While currWhile = (While) curr;
 				
 				BasicBlock condition = new BasicBlock();
+				condition.copyVarTablesFrom(currBB);
 				BasicBlock loop = new BasicBlock();
+				loop.copyVarTablesFrom(currBB);
 				BasicBlock afterLoop = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -277,21 +275,17 @@ public class Compiler {
 				System.out.println("Warning: while loop phis not fully implemented yet.");
 
 				//Set up the phi instructions and variable lookup table
-				Set<String> changedVars = new HashSet<String>();
-				changedVars.addAll(lastLoopBlock.changedVariables);
-				Map<String,Argument> newVarLookupTable = new HashMap<String,Argument>(currBB.varLookupTable);
-				for(String var : changedVars) {
+				afterLoop.copyAllTablesFrom(currBB);
+				for(String var : lastLoopBlock.changedVariables) {
 					Argument loc1 = lastLoopBlock.varLookupTable.get(var);
 					Argument loc2 = currBB.varLookupTable.get(var);
 					
-					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
-					newVarLookupTable.put(var, i.instructionID);
+					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
+					afterLoop.updateVariable(var, i.instructionID, i.instructionID);
 					condition.prependInstruction(i);
-					//TODO: fixup old references to loc2,var in the loop
+					//Fix up old references in the loop that should actually point to phi
+					replaceRefs(loop, var, loc2, i.instructionID);
 				}
-				changedVars.addAll(currBB.changedVariables);
-				afterLoop.changedVariables = changedVars;
-				afterLoop.varLookupTable = newVarLookupTable;
 				
 				currBB = afterLoop;
 			} else if (curr instanceof Return) {
@@ -313,7 +307,10 @@ public class Compiler {
 		Argument idLeft = compileExpression(c.getLeft(),bb);
 		Argument idRight = compileExpression(c.getRight(),bb);
 		
-		bb.appendInstruction(Instruction.makeInstruction(InstructionType.CMP,idLeft,idRight));
+		Instruction i = Instruction.makeInstruction(InstructionType.CMP,idLeft,idRight);
+		bb.appendInstruction(i);
+		addPossibleUse(idLeft, bb, i.instructionID);
+		addPossibleUse(idRight, bb, i.instructionID);
 		
 		RelationOperator o = c.getOperator();
 		InstructionType it;
@@ -355,7 +352,7 @@ public class Compiler {
 		} else if (e instanceof Number) {
 			Number eNum = (Number) e;
 			//Numbers do not need any compilation
-			arg = new Value(eNum.getValue(), "#");
+			arg = new Value(eNum.getValue());
 		} else if (e instanceof Designator) {
 			Designator eDes = (Designator)e;
 			arg = compileDesignator(eDes, bb);
@@ -375,32 +372,32 @@ public class Compiler {
 		Argument rightArg = compileExpression(bin.getRight(), bb);
 		BinaryOperator o = bin.getOperator();
 		
-		Argument arg = null;//TODO: value propogation temporarily disabled
-		if(false && leftArg instanceof Value && rightArg instanceof Value) {
-			int l = ((Value) leftArg).getValue();
-			int r = ((Value) rightArg).getValue();
-			
-			int exp;
-			switch(o) {
-			case ADDITION:
-				exp = l+r;
-				break;
-			case SUBTRACTION:
-				exp = l-r;
-				break;
-			case MULTIPLICATION:
-				exp = l*r;
-				break;
-			case DIVISION:
-				exp = l/r;
-				break;
-			default:
-				exp = Integer.MIN_VALUE;
-				System.out.println("Error unexpected binary operator.");
-			}
-			
-			arg = new Value(exp,"#");
-		} else {
+		Argument arg = null;//TODO: value propagation temporarily disabled
+//		if(leftArg instanceof Value && rightArg instanceof Value) {
+//			int l = ((Value) leftArg).getValue();
+//			int r = ((Value) rightArg).getValue();
+//			
+//			int exp;
+//			switch(o) {
+//			case ADDITION:
+//				exp = l+r;
+//				break;
+//			case SUBTRACTION:
+//				exp = l-r;
+//				break;
+//			case MULTIPLICATION:
+//				exp = l*r;
+//				break;
+//			case DIVISION:
+//				exp = l/r;
+//				break;
+//			default:
+//				exp = Integer.MIN_VALUE;
+//				System.out.println("Error unexpected binary operator.");
+//			}
+//			
+//			arg = new Value(exp);
+//		} else {
 			//Get the instruction type for the binary operator
 			InstructionType it = null;
 			switch(o) {
@@ -424,40 +421,47 @@ public class Compiler {
 			Instruction i = Instruction.makeInstruction(it,leftArg,rightArg);
 			bb.appendInstruction(i);
 			arg = i.instructionID;
-		}
+			
+			//TODO may have an issue with value propagation
+			addPossibleUse(leftArg,bb,i.instructionID);
+			addPossibleUse(rightArg,bb,i.instructionID);
+//		}
 		return arg;
 	}
 
 	public Argument compileDesignator(Designator des, BasicBlock bb) {
+		String var = des.getName();
+		
 		//Create an argument list for the load
-		List<Argument> args = new ArrayList<Argument>();
-		args.add(new ArrayName(des.getName()));
-		if(des.getIndices() != null) {
-			for(Expression exp : des.getIndices()) {
-				args.add(compileExpression(exp,bb));
-			}
-		}
-		Argument[] argsArr = new Argument[args.size()];
-		args.toArray(argsArr);
+		Argument[] args = compileArgsToArray(des.getIndices(), new DesName(var), bb);
 		
 		//Decide whether it is a known variable, unknown variable, or array load
-		//TODO: something is weird here need to think more about behavior
 		Instruction i = null;
-		if(argsArr.length == 1) {
-			Argument id = bb.varLookupTable.get(((ArrayName)argsArr[0]).getName());
+		if(args.length == 1) {
+			Argument id = bb.varLookupTable.get(var);
 			if(id == null) {
 				//Unknown variable
-				i = Instruction.makeInstruction(InstructionType.LOAD, des.getName(), argsArr);
-				bb.appendInstruction(i);
+				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
+				bb.appendInstruction(i);//TODO: is this a semantic error?
 				return i.instructionID;
 			} else {
 				//Known variable
+				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
+				bb.appendInstruction(i);
+				
+				//Make sure the instruction id points to the right variable
+				id = id.clone();
+				id.var = var;
+				
 				return id;
 			}
 		} else {
 			//Array load
-			i = Instruction.makeInstruction(InstructionType.LOADADD, des.getName(), argsArr);
+			i = Instruction.makeInstruction(InstructionType.LOADADD, var, args);
 			bb.appendInstruction(i);
+			for(Argument arg : args) {
+				addPossibleUse(arg,bb,i.instructionID);
+			}
 			return i.instructionID;
 		}
 	}
@@ -465,27 +469,47 @@ public class Compiler {
 	public Argument compileFunctionCallExp(FunctionCallExp fce, BasicBlock bb) {
 		//TODO: handle function calls correctly
 		//Create an argument list for the function call
-		List<Argument> args = new LinkedList<Argument>();
-		args.add(new FunctionName(fce.getName()));
-		for(Expression exp : fce.getArguments()) {
-			args.add(compileExpression(exp,bb));
+		Argument[] args = compileArgsToArray(fce.getArguments(), new FunctionName(fce.getName()), bb);
+		
+		//Create fake function call instruction
+		Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION,args);
+		bb.appendInstruction(i);
+		
+		for(Argument arg : args) {
+			addPossibleUse(arg,bb,i.instructionID);
 		}
 		
-		Argument[] argsArr = new Argument[args.size()];
-		args.toArray(argsArr);
-		Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION,argsArr);
-		bb.appendInstruction(i);
 		return i.instructionID;
 	}
 	
-	//TODO: implement this function
 	public Argument[] compileArgsToArray(List<Expression> exps, Argument first, BasicBlock bb) {
 		List<Argument> args = new LinkedList<Argument>();
-		args.add(first);
-		for(Expression exp : exps) {
-			args.add(compileExpression(exp,bb));
+		if(first != null)
+			args.add(first);
+		if(exps != null) {
+			for(Expression exp : exps) {
+				args.add(compileExpression(exp,bb));
+			}
 		}
 		Argument[] argsArr = new Argument[args.size()];
 		return args.toArray(argsArr);
+	}
+	
+	/*
+	 * Replace all references to an argument with a different argument.
+	 * Should only be used on while blocks.
+	 */
+	public void replaceRefs(BasicBlock bb, String var, Argument oldArg, Argument newArg) {
+		InstructionID def = bb.varDefTable.get(var);
+		DefUse use = duchain.varToMostRecent.get(var);
+		
+		//Iterate through instructions that reference this variable and replace their arguments
+	}
+	
+	public void addPossibleUse(Argument arg, BasicBlock bb, InstructionID id) {
+		if(arg instanceof DesName) {
+			String v = ((DesName)arg).getName();
+			duchain.addDefUse(v, bb.varDefTable.get(v), bb.varLookupTable.get(v), id);
+		}
 	}
 }

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
+import cs241.Argument.InstructionID;
 
 /**`
  * Class to keep track of what code is in what basic block
@@ -25,8 +26,11 @@ public class BasicBlock {
 	List<BasicBlock> dominated;
 	
 	List<Instruction> instructions;
+	
 	Map<String,Argument> varLookupTable;
+	Map<String,InstructionID> varDefTable;
 	Set<String> changedVariables;
+	
 	BasicBlockID bbID;
 	
 	private static int nextBBID = 1;
@@ -45,6 +49,7 @@ public class BasicBlock {
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
 		varLookupTable = new HashMap<String,Argument>();
+		varDefTable = new HashMap<String,InstructionID>();
 		changedVariables = new HashSet<String>();
 		bbID = new BasicBlockID(nextBBID);
 		idToBB.put(bbID, this);
@@ -81,6 +86,23 @@ public class BasicBlock {
 	
 	public void setPrevious(BasicBlock p) {
 		next = p;
+	}
+	
+	public void updateVariable(String var, Argument arg, InstructionID id) {
+		varLookupTable.put(var, arg);
+		varDefTable.put(var, id);
+		changedVariables.add(var);
+	}
+	
+	public void copyVarTablesFrom(BasicBlock bb) {
+		varLookupTable.putAll(bb.varLookupTable);
+		varDefTable.putAll(bb.varDefTable);
+	}
+	
+	public void copyAllTablesFrom(BasicBlock bb) {
+		varLookupTable.putAll(bb.varLookupTable);
+		changedVariables.addAll(bb.changedVariables);
+		varDefTable.putAll(bb.varDefTable);
 	}
 	
 	public String toString() {

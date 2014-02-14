@@ -8,22 +8,26 @@ public abstract class Argument {
 		var = v;
 	}
 	
-	public String getVarName() {
-		return var;
-	}
-	
-	public String toString() {
-		return var;
-	}
-	
 	public int hashCode() {
 		return var.hashCode();
 	}
 	
+	public String toString() {
+		if(var.equals(""))
+			return "";
+		return var + ".";
+	}
+	
+	public abstract Argument clone();
+	
 	public static class Value extends Argument {
 		private int val;
-		public Value(int v, String vs) {
-			super(vs);
+		public Value(int v) {
+			super("");
+			val = v;
+		}
+		public Value(int v, String var) {
+			super(var);
 			val = v;
 		}
 		public int getValue() {
@@ -33,14 +37,17 @@ public abstract class Argument {
 			return 37*val + super.hashCode();
 		}
 		public String toString() {
-			return super.toString() + ".#." + val;
+			return super.toString() + "#." + val;
+		}
+		public Argument clone() {
+			return new Value(val);
 		}
 	}
 	
 	public static class BasicBlockID extends Argument {
 		private int bbID;
 		public BasicBlockID(int id) {
-			super("BB");
+			super("");
 			bbID = id;
 		}
 		public int getID() {
@@ -50,14 +57,17 @@ public abstract class Argument {
 			return 31*bbID + super.hashCode();
 		}
 		public String toString() {
-			return super.toString() + "." + bbID;
+			return super.toString() + "BB." + bbID;
+		}
+		public Argument clone() {
+			return new BasicBlockID(bbID);
 		}
 	}
 	
 	public static class InstructionID extends Argument {
 		private int instructionID;
-		public InstructionID(int id, String v) {
-			super(v);
+		public InstructionID(int id, String var) {
+			super(var);
 			instructionID = id;
 		}
 		public int getID() {
@@ -67,14 +77,17 @@ public abstract class Argument {
 			return 43*instructionID + super.hashCode();
 		}
 		public String toString() {
-			return super.toString() + ".Instruction." + instructionID;
+			return super.toString() + "Instruction." + instructionID;
+		}
+		public Argument clone() {
+			return new InstructionID(instructionID, var);
 		}
 	}
 	
-	public static class ArrayName extends Argument {
+	public static class DesName extends Argument {
 		private String name;
-		public ArrayName(String n) {
-			super("Arr");
+		public DesName(String n) {
+			super("");
 			name = n;
 		}
 		public String getName() {
@@ -84,13 +97,16 @@ public abstract class Argument {
 			return name.hashCode() + super.hashCode();
 		}
 		public String toString() {
-			return super.toString() + "." + name;
+			return super.toString() + "Des." + name;
+		}
+		public Argument clone() {
+			return new DesName(name);
 		}
 	}
 	public static class FunctionName extends Argument {
 		private String name;
 		public FunctionName(String n) {
-			super("Fun");
+			super("");
 			name = n;
 		}
 		public String getName() {
@@ -100,7 +116,10 @@ public abstract class Argument {
 			return name.hashCode() + super.hashCode();
 		}
 		public String toString() {
-			return super.toString() + "." + name;
+			return super.toString() + "Func." + name;
+		}
+		public Argument clone() {
+			return new FunctionName(name);
 		}
 	}
 }
