@@ -50,7 +50,7 @@ public class Instruction {
 	
 	InstructionType type;
 	Argument[] args;
-	InstructionID instructionID;
+	private InstructionID instructionID;
 	private Instruction(InstructionType t, String s, Argument[] a) {
 		type = t;
 		args = new Argument[a.length];
@@ -83,6 +83,10 @@ public class Instruction {
 		instructionID = new InstructionID(nextInstructionID,s);
 		idToInstruction.put(instructionID, this);
 		nextInstructionID++;
+	}
+	
+	public InstructionID getID() {
+		return instructionID;
 	}
 	
 	public int hashCode() {

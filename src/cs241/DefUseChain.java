@@ -3,37 +3,72 @@ package cs241;
 import java.util.HashMap;
 import java.util.Map;
 
+import cs241.Argument.BasicBlockID;
 import cs241.Argument.InstructionID;
 
 public class DefUseChain {
 	public class DefUse {
-		String var;
-		InstructionID def;//The line where the value was assigned
-		Argument arg;//The value assigned at the def
-		InstructionID use;//The location of the use
-		DefUse prev;
-		DefUse next;
-		public DefUse(String v, InstructionID d, Argument a, InstructionID u) {
-			var = v;
-			def = d;
+		private String variable;
+		private InstructionID defInstruction;//The line where the value was assigned
+		private Argument arg;//The value assigned at the def
+		private InstructionID useInstruction;//The location of the use
+		private BasicBlockID bbID;//Basic block of use
+		private DefUse prevDU;
+		private DefUse nextDU;
+		public DefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b) {
+			variable = v;
+			defInstruction = d;
 			arg = a;
-			use = u;
+			useInstruction = u;
+			bbID = b;
+		}
+		
+		public String getVariable() {
+			return variable;
+		}
+		
+		public Argument getArgumentForVariable() {
+			return arg;
+		}
+		
+		public InstructionID getDefLocation() {
+			return defInstruction;
+		}
+		
+		public InstructionID getUseLocation() {
+			return useInstruction;
+		}
+		
+		public BasicBlockID getBasicBlockID() {
+			return bbID;
+		}
+		
+		public DefUse getNextDefUse() {
+			return nextDU;
+		}
+		
+		public DefUse getPreviousDefUse() {
+			return prevDU;
 		}
 	}
 	
-	Map<String,DefUse> varToMostRecent;
+	private Map<String,DefUse> varToMostRecent;
 	
 	public DefUseChain() {
 		varToMostRecent = new HashMap<String,DefUse>();
 	}
 	
-	public void addDefUse(String v, InstructionID d, Argument a, InstructionID u)  {
-		DefUse use = new DefUse(v, d, a, u);
+	public void addDefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b)  {
+		DefUse use = new DefUse(v, d, a, u, b);
 		DefUse prev = varToMostRecent.get(v);
 		if(prev != null) {
-			prev.next = use;
-			use.prev = prev;
+			prev.nextDU = use;
+			use.prevDU = prev;
 		}
 		varToMostRecent.put(v, use);
+	}
+	
+	public DefUse getMostRecentDefUse(String var) {
+		return varToMostRecent.get(var);
 	}
 }

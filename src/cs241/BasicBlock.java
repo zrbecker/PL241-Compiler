@@ -27,11 +27,11 @@ public class BasicBlock {
 	
 	List<Instruction> instructions;
 	
-	Map<String,Argument> varLookupTable;
-	Map<String,InstructionID> varDefTable;
-	Set<String> changedVariables;
+	private Map<String,Argument> varLookupTable;
+	private Map<String,InstructionID> varDefTable;
+	private Set<String> changedVariables;
 	
-	BasicBlockID bbID;
+	private BasicBlockID bbID;
 	
 	private static int nextBBID = 1;
 	private static Map<BasicBlockID,BasicBlock> idToBB = new HashMap<BasicBlockID,BasicBlock>();
@@ -88,10 +88,26 @@ public class BasicBlock {
 		next = p;
 	}
 	
+	public BasicBlockID getID() {
+		return bbID;
+	}
+	
 	public void updateVariable(String var, Argument arg, InstructionID id) {
 		varLookupTable.put(var, arg);
 		varDefTable.put(var, id);
 		changedVariables.add(var);
+	}
+	
+	public Argument getVarArg(String var) {
+		return varLookupTable.get(var);
+	}
+	
+	public InstructionID getVarDef(String var) {
+		return varDefTable.get(var);
+	}
+	
+	public Set<String> getChangedVars() {
+		return changedVariables;
 	}
 	
 	public void copyVarTablesFrom(BasicBlock bb) {

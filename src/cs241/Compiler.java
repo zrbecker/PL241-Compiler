@@ -5,7 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.Reader;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -103,9 +102,10 @@ public class Compiler {
 				
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
+					//Implicit load instruction to make a def
 					Instruction i = Instruction.makeInstruction(InstructionType.STORE, arg);
-					currBB.appendInstruction(i);//TODO: remove this append to use the instruction implicitly
-					currBB.updateVariable(var, arg, i.instructionID);
+					//currBB.appendInstruction(i);
+					currBB.updateVariable(var, arg, i.getID());
 				} else {
 					//TODO: handle arrays correctly
 					Argument[] args = compileArgsToArray(des.getIndices(), new DesName(des.getName()), currBB);
@@ -183,7 +183,7 @@ public class Compiler {
 					next.prev = afterIf;
 
 				//Compile the condition for the if
-				BasicBlockID branchID = thenOnly ? afterIf.bbID : ifElse.bbID;
+				BasicBlockID branchID = thenOnly ? afterIf.getID() : ifElse.getID();
 				compileCondition(currIf.getCondition(),currBB, branchID);
 				
 				//Compile the branches
@@ -192,24 +192,24 @@ public class Compiler {
 				
 				//Add the branch from the ifthen to after the ifelse
 				if(!thenOnly) {
-					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.bbID));
+					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.getID()));
 					lastIfElseBlock = compileIntoBBs(currIf.getElseBlock(), ifElse);
 				}
 				
 				//Get the list of variables that were assigned in the banches
 				Set<String> changedVars = new HashSet<String>();
-				changedVars.addAll(lastIfThenBlock.changedVariables);
+				changedVars.addAll(lastIfThenBlock.getChangedVars());
 				if(!thenOnly)
-					changedVars.addAll(lastIfElseBlock.changedVariables);
+					changedVars.addAll(lastIfElseBlock.getChangedVars());
 				
 				//Create phi instructions
 				afterIf.copyAllTablesFrom(currBB);
 				for(String var : changedVars) {
-					Argument loc1 = lastIfThenBlock.varLookupTable.get(var);
-					Argument loc2 = lastIfElseBlock.varLookupTable.get(var);
+					Argument loc1 = lastIfThenBlock.getVarArg(var);
+					Argument loc2 = lastIfElseBlock.getVarArg(var);
 					
 					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
-					afterIf.updateVariable(var, i.instructionID, i.instructionID);
+					afterIf.updateVariable(var, i.getID(), i.getID());
 					afterIf.appendInstruction(i);
 				}
 				
@@ -263,28 +263,25 @@ public class Compiler {
 					next.prev = afterLoop;
 				
 				//Compile the condition for the while loop
-				compileCondition(currWhile.getCondition(),condition, afterLoop.bbID);
+				compileCondition(currWhile.getCondition(),condition, afterLoop.getID());
 				
 				//Compile loop block
 				BasicBlock lastLoopBlock = compileIntoBBs(currWhile.getBlock(), loop);
 				
 				//Have the loop branch back to the condition
-				lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.bbID));
-
-				//TODO: remove println
-				System.out.println("Warning: while loop phis not fully implemented yet.");
+				lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
 
 				//Set up the phi instructions and variable lookup table
 				afterLoop.copyAllTablesFrom(currBB);
-				for(String var : lastLoopBlock.changedVariables) {
-					Argument loc1 = lastLoopBlock.varLookupTable.get(var);
-					Argument loc2 = currBB.varLookupTable.get(var);
+				for(String var : lastLoopBlock.getChangedVars()) {
+					Argument loc1 = lastLoopBlock.getVarArg(var);
+					Argument loc2 = currBB.getVarArg(var);
 					
 					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
-					afterLoop.updateVariable(var, i.instructionID, i.instructionID);
+					afterLoop.updateVariable(var, i.getID(), i.getID());
 					condition.prependInstruction(i);
 					//Fix up old references in the loop that should actually point to phi
-					replaceRefs(loop, var, loc2, i.instructionID);
+					replaceRefs(loop, var, currBB.getVarDef(var), loc2, i.getID(), currBB.getID());
 				}
 				
 				currBB = afterLoop;
@@ -309,8 +306,8 @@ public class Compiler {
 		
 		Instruction i = Instruction.makeInstruction(InstructionType.CMP,idLeft,idRight);
 		bb.appendInstruction(i);
-		addPossibleUse(idLeft, bb, i.instructionID);
-		addPossibleUse(idRight, bb, i.instructionID);
+		addPossibleUse(idLeft, bb, i.getID());
+		addPossibleUse(idRight, bb, i.getID());
 		
 		RelationOperator o = c.getOperator();
 		InstructionType it;
@@ -420,11 +417,11 @@ public class Compiler {
 			//Combine the two sides of the expression with an instruction
 			Instruction i = Instruction.makeInstruction(it,leftArg,rightArg);
 			bb.appendInstruction(i);
-			arg = i.instructionID;
+			arg = i.getID();
 			
 			//TODO may have an issue with value propagation
-			addPossibleUse(leftArg,bb,i.instructionID);
-			addPossibleUse(rightArg,bb,i.instructionID);
+			addPossibleUse(leftArg,bb,i.getID());
+			addPossibleUse(rightArg,bb,i.getID());
 //		}
 		return arg;
 	}
@@ -438,12 +435,12 @@ public class Compiler {
 		//Decide whether it is a known variable, unknown variable, or array load
 		Instruction i = null;
 		if(args.length == 1) {
-			Argument id = bb.varLookupTable.get(var);
+			Argument id = bb.getVarDef(var);
 			if(id == null) {
 				//Unknown variable
 				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
 				bb.appendInstruction(i);//TODO: is this a semantic error?
-				return i.instructionID;
+				return i.getID();
 			} else {
 				//Known variable
 				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
@@ -451,7 +448,7 @@ public class Compiler {
 				
 				//Make sure the instruction id points to the right variable
 				id = id.clone();
-				id.var = var;
+				id.setVariable(var);
 				
 				return id;
 			}
@@ -460,9 +457,9 @@ public class Compiler {
 			i = Instruction.makeInstruction(InstructionType.LOADADD, var, args);
 			bb.appendInstruction(i);
 			for(Argument arg : args) {
-				addPossibleUse(arg,bb,i.instructionID);
+				addPossibleUse(arg,bb,i.getID());
 			}
-			return i.instructionID;
+			return i.getID();
 		}
 	}
 	
@@ -476,10 +473,10 @@ public class Compiler {
 		bb.appendInstruction(i);
 		
 		for(Argument arg : args) {
-			addPossibleUse(arg,bb,i.instructionID);
+			addPossibleUse(arg,bb,i.getID());
 		}
 		
-		return i.instructionID;
+		return i.getID();
 	}
 	
 	public Argument[] compileArgsToArray(List<Expression> exps, Argument first, BasicBlock bb) {
@@ -499,17 +496,28 @@ public class Compiler {
 	 * Replace all references to an argument with a different argument.
 	 * Should only be used on while blocks.
 	 */
-	public void replaceRefs(BasicBlock bb, String var, Argument oldArg, Argument newArg) {
-		InstructionID def = bb.varDefTable.get(var);
-		DefUse use = duchain.varToMostRecent.get(var);
+	public void replaceRefs(BasicBlock bb, String var, InstructionID def, Argument oldArg, Argument newArg, BasicBlockID stop) {
+		//Get the most recent use of var
+		DefUse use = duchain.getMostRecentDefUse(var);
 		
 		//Iterate through instructions that reference this variable and replace their arguments
+		while(use != null && use.getBasicBlockID().getID() > stop.getID()) {
+			if(use.getDefLocation().equals(def)) {
+				Instruction i = Instruction.getInstructionByID(use.getUseLocation());
+				for(int a = 0; a < i.args.length; a++) {
+					if(i.args[a].getVariable().equals(var) && i.args[a].equals(oldArg)) {
+						i.args[a] = newArg;
+					}
+				}
+			}
+			use = use.getPreviousDefUse();
+		}
 	}
 	
 	public void addPossibleUse(Argument arg, BasicBlock bb, InstructionID id) {
-		if(arg instanceof DesName) {
-			String v = ((DesName)arg).getName();
-			duchain.addDefUse(v, bb.varDefTable.get(v), bb.varLookupTable.get(v), id);
+		if(arg.hasVariable()) {
+			String v = arg.getVariable();
+			duchain.addDefUse(v, bb.getVarDef(v), bb.getVarArg(v), id, bb.getID());
 		}
 	}
 }
