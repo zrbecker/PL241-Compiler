@@ -29,7 +29,9 @@ public class Instruction {
 		READ,
 		WRITE,
 		WLN,
-		LOADADD,//TODO: remove LOADADD
+		RETURN,
+		LOADADD, //For arrays only
+		STOREADD, //For arrays only
 		FUNCTION //TODO: remove FUNCTION
 	}
 
@@ -60,6 +62,7 @@ public class Instruction {
 
 		switch(t) {
 			case FUNCTION:
+				assert(args.length >= 1);
 				break;
 			case NEG:
 			case LOAD:
@@ -72,8 +75,12 @@ public class Instruction {
 			case WLN:
 				assert(args.length == 0);
 				break;
+			case RETURN:
+				assert(args.length == 0 || args.length == 1);
+				break;
 			case PHI:
 			case LOADADD:
+			case STOREADD:
 				assert(args.length >= 2);
 				break;
 			default:

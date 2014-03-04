@@ -15,7 +15,7 @@ public class DefUseChain {
 		private BasicBlockID bbID;//Basic block of use
 		private DefUse prevDU;
 		private DefUse nextDU;
-		public DefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b) {
+		private DefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b) {
 			variable = v;
 			defInstruction = d;
 			arg = a;
@@ -66,6 +66,11 @@ public class DefUseChain {
 			use.prevDU = prev;
 		}
 		varToMostRecent.put(v, use);
+	}
+	
+	public void updateUse(DefUse du, InstructionID newDef, Argument newArg) {
+		du.defInstruction = newDef;
+		du.arg = newArg;
 	}
 	
 	public DefUse getMostRecentDefUse(String var) {

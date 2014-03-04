@@ -10,6 +10,7 @@ import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
 import cs241.Argument.InstructionID;
+import cs241.Instruction.InstructionType;
 
 /**`
  * Class to keep track of what code is in what basic block
@@ -26,6 +27,8 @@ public class BasicBlock {
 	List<BasicBlock> dominated;
 	
 	List<Instruction> instructions;
+	
+	private boolean returnBlock;
 	
 	private Map<String,Argument> varLookupTable;
 	private Map<String,InstructionID> varDefTable;
@@ -48,6 +51,7 @@ public class BasicBlock {
 		parents = new ArrayList<BasicBlock>();
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
+		returnBlock = false;
 		varLookupTable = new HashMap<String,Argument>();
 		varDefTable = new HashMap<String,InstructionID>();
 		changedVariables = new HashSet<String>();
@@ -78,6 +82,8 @@ public class BasicBlock {
 
 	public void appendInstruction(Instruction i) {
 		instructions.add(i);
+		if(i.type == InstructionType.RETURN)
+			returnBlock = true;
 	}
 	
 	public BasicBlock getNext() {
@@ -100,6 +106,14 @@ public class BasicBlock {
 		return bbID;
 	}
 	
+	public boolean isReturnBlock() {
+		return returnBlock;
+	}
+	
+	public void setIsReturnBlock() {
+		returnBlock = true;
+	}
+	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
 		arg = arg.clone();
 		arg.setVariable(var);
@@ -108,19 +122,19 @@ public class BasicBlock {
 		changedVariables.add(var);
 	}
 	
-	public Argument getVarArg(String var) {
+	public Argument getValueForVariable(String var) {
 		return varLookupTable.get(var);
 	}
 	
-	public InstructionID getVarDef(String var) {
+	public InstructionID getDefinitionForVariable(String var) {
 		return varDefTable.get(var);
 	}
 	
-	public Set<String> getChangedVars() {
+	public Set<String> getChangedVariables() {
 		return changedVariables;
 	}
 	
-	public void copyVarTablesFrom(BasicBlock bb) {
+	public void copyVariableTablesFrom(BasicBlock bb) {
 		varLookupTable.putAll(bb.varLookupTable);
 		varDefTable.putAll(bb.varDefTable);
 	}

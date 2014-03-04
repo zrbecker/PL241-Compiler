@@ -5,9 +5,11 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
@@ -42,6 +44,8 @@ public class Compiler {
 	Parser parser;
 	BasicBlock mainRoot;
 	DefUseChain duchain;
+	Map<String,Function> functions;
+	Set<String> globalVariables;
 
 	public Compiler(File in, File out) {
 		inputFile = in;
@@ -49,6 +53,8 @@ public class Compiler {
 		parser = new Parser();
 		mainRoot = new BasicBlock();
 		duchain = new DefUseChain();
+		functions = new HashMap<String,Function>();
+		globalVariables = new HashSet<String>();
 	}
 
 	public void compile() throws FileNotFoundException {
@@ -63,6 +69,8 @@ public class Compiler {
 		List<BasicBlock> functionBBs = new ArrayList<BasicBlock>();
 		if(c.getFunctions() != null) {
 			for(Function func : c.getFunctions()) {
+				functions.put(func.getName(), func);
+				
 				List<Statement> funcBody = func.getBody();
 				BasicBlock funcHead = new BasicBlock();
 				compileIntoBBs(funcBody, funcHead);
@@ -73,9 +81,12 @@ public class Compiler {
 		//Compile the main statement
 		List<Statement> mainCode = c.getBody();
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
-		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END,new Argument[0]));
+		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
 		
 		System.out.println(mainRoot);
+		for(BasicBlock fbb : functionBBs) {
+			System.out.println(fbb);
+		}
 	}
 	
 	public Computation getParseTree() throws FileNotFoundException {
@@ -105,34 +116,30 @@ public class Compiler {
 				if((des.getIndices() == null || des.getIndices().size() == 0) 
 						&& (arg instanceof InstructionID || arg instanceof Value)) {
 					//Implicit store instruction to make a def
-					Instruction i = Instruction.makeInstruction(InstructionType.STORE, arg);
-					//Note that there is no append to the basic block
+					Instruction i = Instruction.makeInstruction(InstructionType.STORE,var,arg);
+					//Note that there should be no append to the basic block
 					
 					currBB.updateVariable(var, arg, i.getID());
 				} else {
-					//TODO: handle arrays correctly
-					Argument[] args = compileArgsToArray(des.getIndices(), new DesName(des.getName()), currBB);
-					currBB.appendInstruction(Instruction.makeInstruction(InstructionType.STORE, args));
-					
-					System.out.println("Error cannot assign to arrays yet.");
+					Argument[] args = compileArgsToArray(des.getIndices(), currBB, arg, new DesName(des.getName()));
+					currBB.appendInstruction(Instruction.makeInstruction(InstructionType.STOREADD, args));
 				}
 			} else if (curr instanceof FunctionCall) {
 				FunctionCall currFC = (FunctionCall) curr;
-	
-				//TODO:handle function calls right
+				
 				//Compile arguments to the function
-				Argument[] args = compileArgsToArray(currFC.getArguments(), new FunctionName(currFC.getName()), currBB);
+				Argument[] args = compileArgsToArray(currFC.getArguments(), currBB, new FunctionName(currFC.getName()));
 
-				//Add the faked function call instruction
+				//Add the function call instruction
 				currBB.appendInstruction(Instruction.makeInstruction(InstructionType.FUNCTION, args));
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
 				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
 
 				BasicBlock ifThen = new BasicBlock();
-				ifThen.copyVarTablesFrom(currBB);
+				ifThen.copyVariableTablesFrom(currBB);
 				BasicBlock ifElse = new BasicBlock();
-				ifElse.copyVarTablesFrom(currBB);
+				ifElse.copyVariableTablesFrom(currBB);
 				BasicBlock afterIf = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -198,22 +205,37 @@ public class Compiler {
 					lastIfElseBlock = compileIntoBBs(currIf.getElseBlock(), ifElse);
 				}
 				
-				//Get the list of variables that were assigned in the branches
-				Set<String> changedVars = new HashSet<String>();
-				changedVars.addAll(lastIfThenBlock.getChangedVars());
-				if(!thenOnly)
-					changedVars.addAll(lastIfElseBlock.getChangedVars());
-				
-				//Create phi instructions
-				afterIf.copyAllTablesFrom(currBB);
-				for(String var : changedVars) {
-					Argument loc1 = lastIfThenBlock.getVarArg(var);
-					Argument loc2 = lastIfElseBlock.getVarArg(var);
+				boolean ifReturn = lastIfThenBlock.isReturnBlock();
+				boolean elseReturn = lastIfElseBlock.isReturnBlock();
+				if(ifReturn && elseReturn) {
+					//If both branches return, then we returned
+					currBB.setIsReturnBlock();
+					return afterIf;
+				} else if(ifReturn) {
+					afterIf.copyAllTablesFrom(lastIfElseBlock);
+				} else if(elseReturn) {
+					afterIf.copyAllTablesFrom(lastIfThenBlock);
+				} else {
+					//Get the list of variables that were assigned in the branches
+					Set<String> changedVars = new HashSet<String>();
+					changedVars.addAll(lastIfThenBlock.getChangedVariables());
+					if(!thenOnly)
+						changedVars.addAll(lastIfElseBlock.getChangedVariables());
 					
-					Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
-					afterIf.updateVariable(var, i.getID(), i.getID());
-					afterIf.appendInstruction(i);
-					addPossibleUse(afterIf, i.getID(), loc1, loc2);
+					//Create phi instructions
+					afterIf.copyAllTablesFrom(currBB);
+					for(String var : changedVars) {
+						Argument loc1 = lastIfThenBlock.getValueForVariable(var);
+						Argument loc2 = lastIfElseBlock.getValueForVariable(var);
+						
+						Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
+						//Implicit store instruction to make a def
+						Instruction t = Instruction.makeInstruction(InstructionType.STORE,i.getID());
+
+						afterIf.appendInstruction(i);
+						afterIf.updateVariable(var, i.getID(), t.getID());
+						addPossibleUse(afterIf, i.getID(), loc1, loc2);//TODO: this is WRONG!
+					}
 				}
 				
 				currBB = afterIf;
@@ -221,9 +243,9 @@ public class Compiler {
 				While currWhile = (While) curr;
 				
 				BasicBlock condition = new BasicBlock();
-				condition.copyVarTablesFrom(currBB);
+				condition.copyAllTablesFrom(currBB);
 				BasicBlock loop = new BasicBlock();
-				loop.copyVarTablesFrom(currBB);
+				loop.copyVariableTablesFrom(currBB);
 				BasicBlock afterLoop = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -270,30 +292,53 @@ public class Compiler {
 				
 				//Compile loop block
 				BasicBlock lastLoopBlock = compileIntoBBs(currWhile.getBlock(), loop);
-				
-				//Have the loop branch back to the condition
-				lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
 
-				//Set up the phi instructions and variable lookup table
-				afterLoop.copyAllTablesFrom(currBB);
-				for(String var : lastLoopBlock.getChangedVars()) {
-					Argument loc1 = lastLoopBlock.getVarArg(var);
-					Argument loc2 = currBB.getVarArg(var);
-					
-					Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
-					condition.prependInstruction(i);
-					afterLoop.updateVariable(var, i.getID(), i.getID());
-					//Fix up old references in the loop that should actually point to phi
-					replaceRefs(var, currBB.getVarDef(var), loc2, i.getID(), currBB.getID());
-					//Only add the phi as a possible use after the replacement
-					addPossibleUse(condition, i.getID(), loc1, loc2);
+				if(lastLoopBlock.isReturnBlock()) {
+					afterLoop.copyAllTablesFrom(condition);
+				} else {
+					//Have the loop branch back to the condition
+					lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
+	
+					//Set up the phi instructions and variable lookup table
+					afterLoop.copyAllTablesFrom(currBB);
+					for(String var : lastLoopBlock.getChangedVariables()) {
+						Argument loc1 = lastLoopBlock.getValueForVariable(var);
+						Argument loc2 = currBB.getValueForVariable(var);
+
+						if(var.equals("b")) {
+							System.out.println("FOUND B!!!!");
+							System.out.println("Loc1 " + loc1);
+							System.out.println("Loc2 " + loc2);
+							System.out.println("bbid " + lastLoopBlock.getID());
+						}
+						
+						Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
+						//Implicit store instruction to make a def
+						Instruction t = Instruction.makeInstruction(InstructionType.STORE,i.getID());
+						//Fix up old references in the loop that should actually point to phi
+						replaceRefs(var, currBB.getDefinitionForVariable(var), t.getID(), loc2, i.getID(), condition.getID());
+						
+						condition.prependInstruction(i);
+						afterLoop.updateVariable(var, i.getID(), t.getID());
+						//Only add the phi as a possible use after the replacement
+						addPossibleUse(condition, i.getID(), loc1, loc2);
+					}
 				}
 				
 				currBB = afterLoop;
 			} else if (curr instanceof Return) {
 				Return currReturn = (Return) curr;
-				//TODO: compile return statement
+				Instruction i;
+				if(currReturn.getExpression() != null) {
+					Argument arg = compileExpression(currReturn.getExpression(), currBB);
+					i = Instruction.makeInstruction(InstructionType.RETURN, arg);
+					addPossibleUse(currBB, i.getID(), arg);
+				} else {
+					i = Instruction.makeInstruction(InstructionType.RETURN);
+				}
+				currBB.appendInstruction(i);
 				System.out.println("Error return statements not yet implemented.");
+				return currBB;
 			} else {
 				System.out.println("Error unexpected statement type.");
 			}
@@ -404,23 +449,19 @@ public class Compiler {
 		String var = des.getName();
 		
 		//Create an argument list for the load
-		Argument[] args = compileArgsToArray(des.getIndices(), new DesName(var), bb);
+		Argument[] args = compileArgsToArray(des.getIndices(), bb, new DesName(var));
 		
 		//Decide whether it is a known variable, unknown variable, or array load
 		Instruction i = null;
 		if(args.length == 1) {
-			Argument id = bb.getVarArg(var);
+			Argument id = bb.getValueForVariable(var);
 			if(id == null) {
 				//Unknown variable
 				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
 				bb.appendInstruction(i);//TODO: is this a semantic error?
 				return i.getID();
 			} else {
-				//Known variable
-				//Make sure the instruction id points to the right variable for DefUse purposes
-				//id = id.clone();
-				//id.setVariable(var);
-				
+				//Known variable				
 				return id;
 			}
 		} else {
@@ -433,23 +474,26 @@ public class Compiler {
 	}
 	
 	public Argument compileFunctionCallExp(FunctionCallExp fce, BasicBlock bb) {
-		//TODO: handle function calls correctly
-		//Create an argument list for the function call
-		Argument[] args = compileArgsToArray(fce.getArguments(), new FunctionName(fce.getName()), bb);
-		
-		//Create fake function call instruction
-		Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION,args);
+		Instruction i;
+		if(fce.getArguments() != null) {
+			//Create an argument list for the function call
+			Argument[] args = compileArgsToArray(fce.getArguments(), bb, new FunctionName(fce.getName()));
+			i = Instruction.makeInstruction(InstructionType.FUNCTION,args);
+			addPossibleUse(bb,i.getID(),args);
+		} else {
+			i = Instruction.makeInstruction(InstructionType.FUNCTION,new FunctionName(fce.getName()));
+		}
 		bb.appendInstruction(i);
-		
-		addPossibleUse(bb,i.getID(),args);
 		
 		return i.getID();
 	}
 	
-	public Argument[] compileArgsToArray(List<Expression> exps, Argument first, BasicBlock bb) {
+	public Argument[] compileArgsToArray(List<Expression> exps, BasicBlock bb, Argument... first) {
 		List<Argument> args = new LinkedList<Argument>();
-		if(first != null)
-			args.add(first);
+		if(first != null) {
+			for(Argument a : first)
+				args.add(a);
+		}
 		if(exps != null) {
 			for(Expression exp : exps) {
 				args.add(compileExpression(exp,bb));
@@ -463,19 +507,26 @@ public class Compiler {
 	 * Replace all references to an argument with a different argument.
 	 * Should only be used on while blocks.
 	 */
-	public void replaceRefs(String var, InstructionID def, Argument oldArg, Argument newArg, BasicBlockID stop) {
+	public void replaceRefs(String var, InstructionID def, InstructionID newDef, Argument oldArg, Argument newArg, BasicBlockID stop) {
+		System.out.println("Replacing " + var + " deffed at " + def + " as "+ oldArg + " with " + newArg + " which was deffed at " + newDef);
+		
 		//Get the most recent use of var
 		DefUse use = duchain.getMostRecentDefUse(var);
 		
 		//Iterate through instructions that reference this variable and replace their arguments
-		while(use != null && use.getBasicBlockID().getID() > stop.getID()) {
+		while(use != null && use.getBasicBlockID().getID() >= stop.getID()) {
 			if(use.getDefLocation().equals(def)) {
 				Instruction i = Instruction.getInstructionByID(use.getUseLocation());
 				for(int a = 0; a < i.args.length; a++) {
 					if(i.args[a].getVariable().equals(var) && i.args[a].equals(oldArg)) {
 						i.args[a] = newArg;
+						duchain.updateUse(use, newDef, newArg);
+					} else if(i.args[a].getVariable().equals(var)) {
+						System.out.println(var + " was used, but now "+ i.args[a] + " not " + oldArg);
 					}
 				}
+			} else {
+				System.out.println("Def was " + use.getDefLocation() + " value was " + use.getArgumentForVariable() + " use was " + use.getUseLocation());
 			}
 			use = use.getPreviousDefUse();
 		}
@@ -485,7 +536,7 @@ public class Compiler {
 		for(Argument arg : args) {
 			if(arg.hasVariable()) {
 				String v = arg.getVariable();
-				duchain.addDefUse(v, bb.getVarDef(v), bb.getVarArg(v), id, bb.getID());
+				duchain.addDefUse(v, bb.getDefinitionForVariable(v), bb.getValueForVariable(v), id, bb.getID());
 			}
 		}
 	}
