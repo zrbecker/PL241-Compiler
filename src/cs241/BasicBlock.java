@@ -10,6 +10,7 @@ import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
 import cs241.Argument.InstructionID;
+import cs241.Argument.VariableArg;
 import cs241.Instruction.InstructionType;
 
 /**`
@@ -30,8 +31,7 @@ public class BasicBlock {
 	
 	private boolean returnBlock;
 	
-	private Map<String,Argument> varLookupTable;
-	private Map<String,InstructionID> varDefTable;
+	private Map<String,VariableArg> varLookupTable;
 	private Set<String> changedVariables;
 	
 	private BasicBlockID bbID;
@@ -52,8 +52,7 @@ public class BasicBlock {
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
 		returnBlock = false;
-		varLookupTable = new HashMap<String,Argument>();
-		varDefTable = new HashMap<String,InstructionID>();
+		varLookupTable = new HashMap<String,VariableArg>();
 		changedVariables = new HashSet<String>();
 		bbID = new BasicBlockID(nextBBID);
 		idToBB.put(bbID, this);
@@ -115,34 +114,34 @@ public class BasicBlock {
 	}
 	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
-		arg = arg.clone();
-		arg.setVariable(var);
-		varLookupTable.put(var, arg);
-		varDefTable.put(var, defInstructionID);
+		VariableArg v = new VariableArg(var,arg,defInstructionID);
+		varLookupTable.put(var, v);
 		changedVariables.add(var);
 	}
 	
-	public Argument getValueForVariable(String var) {
+	public VariableArg getVariable(String var) {
 		return varLookupTable.get(var);
 	}
 	
+	public Argument getValueForVariable(String var) {
+		return varLookupTable.get(var).getValue();
+	}
+	
 	public InstructionID getDefinitionForVariable(String var) {
-		return varDefTable.get(var);
+		return varLookupTable.get(var).getDef();
 	}
 	
 	public Set<String> getChangedVariables() {
 		return changedVariables;
 	}
 	
-	public void copyVariableTablesFrom(BasicBlock bb) {
+	public void copyVariableTableFrom(BasicBlock bb) {
 		varLookupTable.putAll(bb.varLookupTable);
-		varDefTable.putAll(bb.varDefTable);
 	}
 	
 	public void copyAllTablesFrom(BasicBlock bb) {
 		varLookupTable.putAll(bb.varLookupTable);
 		changedVariables.addAll(bb.changedVariables);
-		varDefTable.putAll(bb.varDefTable);
 	}
 	
 	public String toString() {

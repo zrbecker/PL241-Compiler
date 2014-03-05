@@ -1,52 +1,17 @@
 package cs241;
 
-
 public abstract class Argument {
-	private String var;
 	
 	public Argument() {
-		var = "";
-	}
-	
-	public Argument(String v) {
-		var = v;
-	}
-
-	public boolean hasVariable() {
-		return !var.equals("");
-	}
-	
-	public String getVariable() {
-		return var;
-	}
-	
-	public void setVariable(String v) {
-		var = v;
-	}
-	
-	public int hashCode() {
-		return var.hashCode();
 	}
 	
 	public boolean equals(Argument a) {
-		return this.getClass().getName().equals(a.getClass().getName());
+		return this.getClass().equals(a.getClass());
 	}
-	
-	public String toString() {
-		if(var.equals(""))
-			return "";
-		return var + ".";
-	}
-	
-	public abstract Argument clone();
 	
 	public static class Value extends Argument {
 		private int val;
 		public Value(int v) {
-			val = v;
-		}
-		public Value(int v, String var) {
-			super(var);
 			val = v;
 		}
 		public int getValue() {
@@ -61,10 +26,7 @@ public abstract class Argument {
 		}
 		
 		public String toString() {
-			return super.toString() + "#." + val;
-		}
-		public Argument clone() {
-			return new Value(val,this.getVariable());
+			return "#." + val;
 		}
 	}
 	
@@ -83,17 +45,13 @@ public abstract class Argument {
 			return bbID == id.bbID;
 		}
 		public String toString() {
-			return super.toString() + "BB." + bbID;
-		}
-		public Argument clone() {
-			return new BasicBlockID(bbID);
+			return "BB." + bbID;
 		}
 	}
 	
 	public static class InstructionID extends Argument {
 		private int instructionID;
-		public InstructionID(int id, String var) {
-			super(var);
+		public InstructionID(int id) {
 			instructionID = id;
 		}
 		public int getID() {
@@ -106,10 +64,7 @@ public abstract class Argument {
 			return instructionID == id.instructionID;
 		}
 		public String toString() {
-			return super.toString() + "Instruction." + instructionID;
-		}
-		public Argument clone() {
-			return new InstructionID(instructionID, this.getVariable());
+			return "Instruction." + instructionID;
 		}
 	}
 	
@@ -128,10 +83,7 @@ public abstract class Argument {
 			return name.equals(dn.name);
 		}
 		public String toString() {
-			return super.toString() + "Des." + name;
-		}
-		public Argument clone() {
-			return new DesName(name);
+			return "Des." + name;
 		}
 	}
 	public static class FunctionName extends Argument {
@@ -149,10 +101,37 @@ public abstract class Argument {
 			return name.equals(fn.name);
 		}
 		public String toString() {
-			return super.toString() + "Func." + name;
+			return "Func." + name;
 		}
-		public Argument clone() {
-			return new FunctionName(name);
+	}
+	public static class VariableArg extends Argument {
+		private String var;
+		private Argument val;
+		private InstructionID def;
+		public VariableArg(String vr, Argument vl, InstructionID d) {
+			var = vr;
+			assert vl instanceof Value || vl instanceof InstructionID || vl instanceof VariableArg;
+			if(vl instanceof VariableArg && ((VariableArg) vl).val instanceof VariableArg) {
+				vl = ((VariableArg) vl).val;
+			}
+			val = vl;
+			def = d;
+		}
+		public String getVariableName() {
+			return var;
+		}
+		public Argument getValue() {
+			return val;
+		}
+		public InstructionID getDef() {
+			return def;
+		}
+		public boolean equals(VariableArg v) {
+			System.out.println("Comparing " + this + " with " + v);
+			return var.equals(v.var) && val.equals(v.val) && def.equals(v.def);
+		}
+		public String toString() {
+			return var + "." + val + "." + def;
 		}
 	}
 }

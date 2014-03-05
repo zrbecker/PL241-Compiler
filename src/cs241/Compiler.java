@@ -17,6 +17,7 @@ import cs241.Argument.DesName;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
+import cs241.Argument.VariableArg;
 import cs241.DefUseChain.DefUse;
 import cs241.Instruction.InstructionType;
 import cs241.parser.Parser;
@@ -113,11 +114,9 @@ public class Compiler {
 				Argument arg = compileExpression(currAssignment.getRight(),currBB);
 				String var = des.getName();
 				
-				if((des.getIndices() == null || des.getIndices().size() == 0) 
-						&& (arg instanceof InstructionID || arg instanceof Value)) {
-					//Implicit store instruction to make a def
-					Instruction i = Instruction.makeInstruction(InstructionType.STORE,var,arg);
-					//Note that there should be no append to the basic block
+				if(des.getIndices() == null || des.getIndices().size() == 0) {
+					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,arg, new DesName(var));
+					currBB.appendInstruction(i);
 					
 					currBB.updateVariable(var, arg, i.getID());
 				} else {
@@ -137,9 +136,9 @@ public class Compiler {
 				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
 
 				BasicBlock ifThen = new BasicBlock();
-				ifThen.copyVariableTablesFrom(currBB);
+				ifThen.copyVariableTableFrom(currBB);
 				BasicBlock ifElse = new BasicBlock();
-				ifElse.copyVariableTablesFrom(currBB);
+				ifElse.copyVariableTableFrom(currBB);
 				BasicBlock afterIf = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -225,16 +224,17 @@ public class Compiler {
 					//Create phi instructions
 					afterIf.copyAllTablesFrom(currBB);
 					for(String var : changedVars) {
-						Argument loc1 = lastIfThenBlock.getValueForVariable(var);
-						Argument loc2 = lastIfElseBlock.getValueForVariable(var);
+						VariableArg loc1 = lastIfThenBlock.getVariable(var);
+						VariableArg loc2 = lastIfElseBlock.getVariable(var);
 						
-						Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
+						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
 						Instruction t = Instruction.makeInstruction(InstructionType.STORE,i.getID());
 
+						duchain.addDefUse(var, lastIfThenBlock.getDefinitionForVariable(var), loc1, i.getID(), afterIf.getID());
+						duchain.addDefUse(var, lastIfElseBlock.getDefinitionForVariable(var), loc2, i.getID(), afterIf.getID());
 						afterIf.appendInstruction(i);
 						afterIf.updateVariable(var, i.getID(), t.getID());
-						addPossibleUse(afterIf, i.getID(), loc1, loc2);//TODO: this is WRONG!
 					}
 				}
 				
@@ -245,7 +245,7 @@ public class Compiler {
 				BasicBlock condition = new BasicBlock();
 				condition.copyAllTablesFrom(currBB);
 				BasicBlock loop = new BasicBlock();
-				loop.copyVariableTablesFrom(currBB);
+				loop.copyVariableTableFrom(currBB);
 				BasicBlock afterLoop = new BasicBlock();
 				
 				//Set up parent/child relationship
@@ -302,8 +302,8 @@ public class Compiler {
 					//Set up the phi instructions and variable lookup table
 					afterLoop.copyAllTablesFrom(currBB);
 					for(String var : lastLoopBlock.getChangedVariables()) {
-						Argument loc1 = lastLoopBlock.getValueForVariable(var);
-						Argument loc2 = currBB.getValueForVariable(var);
+						VariableArg loc1 = lastLoopBlock.getVariable(var);
+						VariableArg loc2 = currBB.getVariable(var);
 
 						if(var.equals("b")) {
 							System.out.println("FOUND B!!!!");
@@ -312,16 +312,18 @@ public class Compiler {
 							System.out.println("bbid " + lastLoopBlock.getID());
 						}
 						
-						Instruction i = Instruction.makeInstruction(InstructionType.PHI,var,loc1,loc2);
+						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
 						Instruction t = Instruction.makeInstruction(InstructionType.STORE,i.getID());
 						//Fix up old references in the loop that should actually point to phi
 						replaceRefs(var, currBB.getDefinitionForVariable(var), t.getID(), loc2, i.getID(), condition.getID());
 						
+						//Only add the phi as a possible use after the replacement
+						duchain.addDefUse(var, lastLoopBlock.getDefinitionForVariable(var), loc1, i.getID(), condition.getID());
+						duchain.addDefUse(var, currBB.getDefinitionForVariable(var), loc2, i.getID(), condition.getID());
+						
 						condition.prependInstruction(i);
 						afterLoop.updateVariable(var, i.getID(), t.getID());
-						//Only add the phi as a possible use after the replacement
-						addPossibleUse(condition, i.getID(), loc1, loc2);
 					}
 				}
 				
@@ -454,19 +456,19 @@ public class Compiler {
 		//Decide whether it is a known variable, unknown variable, or array load
 		Instruction i = null;
 		if(args.length == 1) {
-			Argument id = bb.getValueForVariable(var);
-			if(id == null) {
+			VariableArg varg = bb.getVariable(var);
+			if(varg == null) {
 				//Unknown variable
-				i = Instruction.makeInstruction(InstructionType.LOAD, var, args);
+				i = Instruction.makeInstruction(InstructionType.LOAD, args);
 				bb.appendInstruction(i);//TODO: is this a semantic error?
 				return i.getID();
 			} else {
 				//Known variable				
-				return id;
+				return varg;
 			}
 		} else {
 			//Array load
-			i = Instruction.makeInstruction(InstructionType.LOADADD, var, args);
+			i = Instruction.makeInstruction(InstructionType.LOADADD, args);
 			bb.appendInstruction(i);
 			addPossibleUse(bb,i.getID(),args);
 			return i.getID();
@@ -507,26 +509,31 @@ public class Compiler {
 	 * Replace all references to an argument with a different argument.
 	 * Should only be used on while blocks.
 	 */
-	public void replaceRefs(String var, InstructionID def, InstructionID newDef, Argument oldArg, Argument newArg, BasicBlockID stop) {
-		System.out.println("Replacing " + var + " deffed at " + def + " as "+ oldArg + " with " + newArg + " which was deffed at " + newDef);
-		
+	public void replaceRefs(String var, InstructionID def, InstructionID newDef, VariableArg oldArg, InstructionID newArg, BasicBlockID stop) {
 		//Get the most recent use of var
 		DefUse use = duchain.getMostRecentDefUse(var);
 		
+		VariableArg newVar = new VariableArg(var,newArg,newDef);
 		//Iterate through instructions that reference this variable and replace their arguments
 		while(use != null && use.getBasicBlockID().getID() >= stop.getID()) {
 			if(use.getDefLocation().equals(def)) {
 				Instruction i = Instruction.getInstructionByID(use.getUseLocation());
 				for(int a = 0; a < i.args.length; a++) {
-					if(i.args[a].getVariable().equals(var) && i.args[a].equals(oldArg)) {
-						i.args[a] = newArg;
-						duchain.updateUse(use, newDef, newArg);
-					} else if(i.args[a].getVariable().equals(var)) {
-						System.out.println(var + " was used, but now "+ i.args[a] + " not " + oldArg);
+					Argument arg = i.args[a];
+					if(arg instanceof VariableArg) {
+						VariableArg v = (VariableArg)arg;
+						if(v.equals(oldArg)) {
+							i.args[a] = newVar;
+							duchain.updateUse(use, newDef, newVar);
+						} else if(v.getValue() instanceof VariableArg) {
+							VariableArg v2 = ((VariableArg)v.getValue());
+							if(v2.equals(oldArg)) {
+								i.args[a] = new VariableArg(v.getVariableName(),newVar,v.getDef());
+								//duchain.updateUse(use, , i.args[a]);
+							}
+						}
 					}
 				}
-			} else {
-				System.out.println("Def was " + use.getDefLocation() + " value was " + use.getArgumentForVariable() + " use was " + use.getUseLocation());
 			}
 			use = use.getPreviousDefUse();
 		}
@@ -534,9 +541,9 @@ public class Compiler {
 	
 	public void addPossibleUse(BasicBlock bb, InstructionID id, Argument... args) {
 		for(Argument arg : args) {
-			if(arg.hasVariable()) {
-				String v = arg.getVariable();
-				duchain.addDefUse(v, bb.getDefinitionForVariable(v), bb.getValueForVariable(v), id, bb.getID());
+			if(arg instanceof VariableArg) {
+				VariableArg v = ((VariableArg)arg);
+				duchain.addDefUse(v.getVariableName(), v.getDef(), v.getValue(), id, bb.getID());
 			}
 		}
 	}

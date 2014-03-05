@@ -43,17 +43,13 @@ public class Instruction {
 	}
 	
 	public static Instruction makeInstruction(InstructionType t, Argument... args) {
-		return new Instruction(t,"",args);
-	}
-	
-	public static Instruction makeInstruction(InstructionType t, String s, Argument... args) {
-		return new Instruction(t,s,args);
+		return new Instruction(t,args);
 	}
 	
 	InstructionType type;
 	Argument[] args;
 	private InstructionID instructionID;
-	private Instruction(InstructionType t, String s, Argument[] a) {
+	private Instruction(InstructionType t, Argument[] a) {
 		type = t;
 		args = new Argument[a.length];
 		for(int i = 0; i < a.length; i++) {
@@ -87,7 +83,7 @@ public class Instruction {
 				assert(args.length == 2);
 				break;
 		}
-		instructionID = new InstructionID(nextInstructionID,s);
+		instructionID = new InstructionID(nextInstructionID);
 		idToInstruction.put(instructionID, this);
 		nextInstructionID++;
 	}
@@ -178,9 +174,14 @@ public class Instruction {
 		case LOADADD:
 			s += "LOADADD ";
 			break;
+		case STOREADD:
+			s += "STOREADD ";
+			break;
 		case FUNCTION:
 			s += "FUNCTION ";
 			break;
+		default:
+			s+= "UNRECOGNIZED INSTRUCTION";
 		}
 		for(Argument arg : args) {
 			s += arg.toString() + " ";
