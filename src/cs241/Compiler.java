@@ -511,31 +511,26 @@ public class Compiler {
 	 */
 	public void replaceRefs(String var, InstructionID def, InstructionID newDef, VariableArg oldArg, InstructionID newArg, BasicBlockID stop) {
 		//Get the most recent use of var
-		DefUse use = duchain.getMostRecentDefUse(var);
+		DefUse use = duchain.getMostRecentDefUse(def);
 		
-		VariableArg newVar = new VariableArg(var,newArg,newDef);
 		//Iterate through instructions that reference this variable and replace their arguments
 		while(use != null && use.getBasicBlockID().getID() >= stop.getID()) {
-			if(use.getDefLocation().equals(def)) {
-				Instruction i = Instruction.getInstructionByID(use.getUseLocation());
-				for(int a = 0; a < i.args.length; a++) {
-					Argument arg = i.args[a];
-					if(arg instanceof VariableArg) {
-						VariableArg v = (VariableArg)arg;
-						if(v.equals(oldArg)) {
-							i.args[a] = newVar;
-							duchain.updateUse(use, newDef, newVar);
-						} else if(v.getValue() instanceof VariableArg) {
-							VariableArg v2 = ((VariableArg)v.getValue());
-							if(v2.equals(oldArg)) {
-								i.args[a] = new VariableArg(v.getVariableName(),newVar,v.getDef());
-								//duchain.updateUse(use, , i.args[a]);
-							}
-						}
+			DefUse prevUse = use.getPreviousDefUse();
+			
+			Instruction i = Instruction.getInstructionByID(use.getUseLocation());
+			for(int a = 0; a < i.args.length; a++) {
+				Argument arg = i.args[a];
+				if(arg instanceof VariableArg) {
+					VariableArg v = (VariableArg)arg;
+					if(v.getDef().equals(def)) {
+						i.args[a] = new VariableArg(v.getVariableName(), newArg ,newDef);
+						duchain.removeDefUse(use);
+						duchain.addDefUse(v.getVariableName(), newDef, i.args[a], i.getID(), use.getBasicBlockID());
 					}
 				}
 			}
-			use = use.getPreviousDefUse();
+			
+			use = prevUse;
 		}
 	}
 	

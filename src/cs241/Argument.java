@@ -18,7 +18,7 @@ public abstract class Argument {
 			return val;
 		}
 		public int hashCode() {
-			return 37*val + super.hashCode();
+			return 37*val;
 		}
 		
 		public boolean equals(Value v) {
@@ -39,7 +39,7 @@ public abstract class Argument {
 			return bbID;
 		}
 		public int hashCode() {
-			return 31*bbID + super.hashCode();
+			return 31*bbID;
 		}
 		public boolean equals(BasicBlockID id) {
 			return bbID == id.bbID;
@@ -58,7 +58,7 @@ public abstract class Argument {
 			return instructionID;
 		}
 		public int hashCode() {
-			return 43*instructionID + super.hashCode();
+			return 43*instructionID;
 		}
 		public boolean equals(InstructionID id) {
 			return instructionID == id.instructionID;
@@ -77,7 +77,7 @@ public abstract class Argument {
 			return name;
 		}
 		public int hashCode() {
-			return name.hashCode() + super.hashCode();
+			return name.hashCode();
 		}
 		public boolean equals(DesName dn) {
 			return name.equals(dn.name);
@@ -95,7 +95,7 @@ public abstract class Argument {
 			return name;
 		}
 		public int hashCode() {
-			return name.hashCode() + super.hashCode();
+			return name.hashCode();
 		}
 		public boolean equals(FunctionName fn) {
 			return name.equals(fn.name);
@@ -111,7 +111,8 @@ public abstract class Argument {
 		public VariableArg(String vr, Argument vl, InstructionID d) {
 			var = vr;
 			assert vl instanceof Value || vl instanceof InstructionID || vl instanceof VariableArg;
-			if(vl instanceof VariableArg && ((VariableArg) vl).val instanceof VariableArg) {
+			while(vl instanceof VariableArg) {
+				d = ((VariableArg) vl).def;
 				vl = ((VariableArg) vl).val;
 			}
 			val = vl;

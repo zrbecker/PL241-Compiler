@@ -9,7 +9,7 @@ import cs241.Argument.InstructionID;
 public class DefUseChain {
 	public class DefUse {
 		private String variable;
-		private InstructionID defInstruction;//The line where the value was assigned
+		private InstructionID defInstruction;//The line where the value was deffed
 		private Argument arg;//The value assigned at the def
 		private InstructionID useInstruction;//The location of the use
 		private BasicBlockID bbID;//Basic block of use
@@ -52,20 +52,20 @@ public class DefUseChain {
 		}
 	}
 	
-	private Map<String,DefUse> varToMostRecent;
+	private Map<InstructionID,DefUse> varToMostRecent;
 	
 	public DefUseChain() {
-		varToMostRecent = new HashMap<String,DefUse>();
+		varToMostRecent = new HashMap<InstructionID,DefUse>();
 	}
 	
 	public void addDefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b)  {
 		DefUse use = new DefUse(v, d, a, u, b);
-		DefUse prev = varToMostRecent.get(v);
+		DefUse prev = varToMostRecent.get(d);
 		if(prev != null) {
 			prev.nextDU = use;
 			use.prevDU = prev;
 		}
-		varToMostRecent.put(v, use);
+		varToMostRecent.put(d, use);
 	}
 	
 	public void updateUse(DefUse du, InstructionID newDef, Argument newArg) {
@@ -73,7 +73,16 @@ public class DefUseChain {
 		du.arg = newArg;
 	}
 	
-	public DefUse getMostRecentDefUse(String var) {
-		return varToMostRecent.get(var);
+	public DefUse getMostRecentDefUse(InstructionID d) {
+		return varToMostRecent.get(d);
+	}
+
+	public void removeDefUse(DefUse use) {
+		DefUse prev = use.prevDU;
+		DefUse next = use.nextDU;
+		if(prev!=null)
+			prev.nextDU = next;
+		if(next!=null)
+			next.prevDU = prev;
 	}
 }
