@@ -521,13 +521,11 @@ public class Compiler {
 					VariableArg v = (VariableArg)arg;
 					
 					if(v instanceof CopiedVariable) {
-						//If the use came from copy propagation make sure the copy happened after the stop point
+						//If the use came from copy propagation make sure the original copy happened after the stop point
 						//   e.g. it was not copied before a while loop to a variable that is being replaced
 						CopiedVariable cv = (CopiedVariable)v;
-						if(cv.getBasicBlockID().getID() < stop.getID())
-							continue;//TODO: test this functionality, i think it may still be wrong
-						//TODO: maybe condition on the type of oldarg
-						//  if old arg is a copy itself or not
+						if(cv.getBasicBlockIDOfCopy().getID() < stop.getID())
+							continue;//TODO: go through this functionality with zach to check
 					}
 					
 					i.args[a] = i.args[a].clone();

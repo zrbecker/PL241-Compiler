@@ -181,7 +181,7 @@ public abstract class Argument {
 		public InstructionID getCopyDef() {
 			return copyDef;
 		}
-		public BasicBlockID getBasicBlockID() {
+		public BasicBlockID getBasicBlockIDOfCopy() {
 			return bbID;
 		}
 		public boolean equals(CopiedVariable v) {
