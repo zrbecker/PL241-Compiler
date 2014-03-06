@@ -11,6 +11,7 @@ import java.util.Set;
 import cs241.Argument.BasicBlockID;
 import cs241.Argument.InstructionID;
 import cs241.Argument.VariableArg;
+import cs241.Argument.CopiedVariable;
 import cs241.Instruction.InstructionType;
 
 /**`
@@ -114,7 +115,12 @@ public class BasicBlock {
 	}
 	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
-		VariableArg v = new VariableArg(var,arg,defInstructionID);
+		VariableArg v;
+		if(arg instanceof VariableArg) {
+			v = new CopiedVariable(var,(VariableArg)arg,defInstructionID,bbID);
+		} else {
+			v = new VariableArg(var,arg,defInstructionID);
+		}
 		varLookupTable.put(var, v);
 		changedVariables.add(var);
 	}

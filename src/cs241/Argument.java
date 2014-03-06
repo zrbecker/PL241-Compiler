@@ -1,13 +1,20 @@
 package cs241;
 
+
 public abstract class Argument {
 	
 	public Argument() {
 	}
 	
+	public boolean isVariable() {
+		return false;
+	}
+	
 	public boolean equals(Argument a) {
 		return this.getClass().equals(a.getClass());
 	}
+	
+	public abstract Argument clone();
 	
 	public static class Value extends Argument {
 		private int val;
@@ -28,6 +35,9 @@ public abstract class Argument {
 		public String toString() {
 			return "#." + val;
 		}
+		public Argument clone() {
+			return new Value(val);
+		}
 	}
 	
 	public static class BasicBlockID extends Argument {
@@ -46,6 +56,9 @@ public abstract class Argument {
 		}
 		public String toString() {
 			return "BB." + bbID;
+		}
+		public Argument clone() {
+			return new BasicBlockID(bbID);
 		}
 	}
 	
@@ -66,6 +79,9 @@ public abstract class Argument {
 		public String toString() {
 			return "Instruction." + instructionID;
 		}
+		public Argument clone() {
+			return new InstructionID(instructionID);
+		}
 	}
 	
 	public static class DesName extends Argument {
@@ -85,6 +101,9 @@ public abstract class Argument {
 		public String toString() {
 			return "Des." + name;
 		}
+		public Argument clone() {
+			return new DesName(name);
+		}
 	}
 	public static class FunctionName extends Argument {
 		private String name;
@@ -103,6 +122,9 @@ public abstract class Argument {
 		public String toString() {
 			return "Func." + name;
 		}
+		public Argument clone() {
+			return new FunctionName(name);
+		}
 	}
 	public static class VariableArg extends Argument {
 		private String var;
@@ -110,11 +132,7 @@ public abstract class Argument {
 		private InstructionID def;
 		public VariableArg(String vr, Argument vl, InstructionID d) {
 			var = vr;
-			assert vl instanceof Value || vl instanceof InstructionID || vl instanceof VariableArg;
-			while(vl instanceof VariableArg) {
-				d = ((VariableArg) vl).def;
-				vl = ((VariableArg) vl).val;
-			}
+			assert vl instanceof Value || vl instanceof InstructionID;
 			val = vl;
 			def = d;
 		}
@@ -127,12 +145,53 @@ public abstract class Argument {
 		public InstructionID getDef() {
 			return def;
 		}
+		public boolean isVariable() {
+			return true;
+		}
 		public boolean equals(VariableArg v) {
-			System.out.println("Comparing " + this + " with " + v);
 			return var.equals(v.var) && val.equals(v.val) && def.equals(v.def);
 		}
 		public String toString() {
 			return var + "." + val + "." + def;
+		}
+		public void updateValueAndDef(InstructionID newArg, InstructionID newDef) {
+			def = newDef;
+			val = newArg;
+		}
+		public Argument clone() {
+			return new VariableArg(var,val.clone(),(InstructionID)def.clone());
+		}
+	}
+	public static class CopiedVariable extends VariableArg {
+		private String copiedVar;
+		private InstructionID copyDef;
+		private BasicBlockID bbID;//Basic block of the def
+		public CopiedVariable(String cvr, String vr, Argument vl, InstructionID d, InstructionID cd, BasicBlockID b) {
+			super(vr,vl,d);
+			copiedVar = cvr;
+			copyDef = cd;
+			bbID = b;
+		}
+		public CopiedVariable(String cvr, VariableArg v, InstructionID cd, BasicBlockID b) {
+			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd,b);
+		}
+		public String getCopiedVar() {
+			return copiedVar;
+		}
+		public InstructionID getCopyDef() {
+			return copyDef;
+		}
+		public BasicBlockID getBasicBlockID() {
+			return bbID;
+		}
+		public boolean equals(CopiedVariable v) {
+			return super.equals((VariableArg)v) && copiedVar.equals(v.copiedVar) && copyDef.equals(v.copyDef) && bbID.equals(v.bbID);
+		}
+		public String toString() {
+			return copiedVar + "." + copyDef + "." + bbID + ".copyof." + super.toString();
+		}
+		public Argument clone() {
+			return new CopiedVariable(copiedVar,(VariableArg)super.clone(),copyDef,bbID);
 		}
 	}
 }

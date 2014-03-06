@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
+import cs241.Argument.CopiedVariable;
 import cs241.Argument.DesName;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
@@ -117,7 +118,7 @@ public class Compiler {
 				if(des.getIndices() == null || des.getIndices().size() == 0) {
 					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,arg, new DesName(var));
 					currBB.appendInstruction(i);
-					
+					addPossibleUse(currBB,i.getID(),arg);
 					currBB.updateVariable(var, arg, i.getID());
 				} else {
 					Argument[] args = compileArgsToArray(des.getIndices(), currBB, arg, new DesName(des.getName()));
@@ -130,7 +131,9 @@ public class Compiler {
 				Argument[] args = compileArgsToArray(currFC.getArguments(), currBB, new FunctionName(currFC.getName()));
 
 				//Add the function call instruction
-				currBB.appendInstruction(Instruction.makeInstruction(InstructionType.FUNCTION, args));
+				Instruction i = Instruction.makeInstruction(InstructionType.FUNCTION, args);
+				currBB.appendInstruction(i);
+				addPossibleUse(currBB, i.getID(), args);
 			} else if (curr instanceof If) {
 				If currIf = (If)curr;
 				boolean thenOnly = currIf.getElseBlock() == null || currIf.getElseBlock().size() == 0;
@@ -229,7 +232,7 @@ public class Compiler {
 						
 						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
-						Instruction t = Instruction.makeInstruction(InstructionType.STORE,i.getID());
+						Instruction t = Instruction.makeInstruction(InstructionType.MOVE,i.getID(), new DesName(var));
 
 						duchain.addDefUse(var, lastIfThenBlock.getDefinitionForVariable(var), loc1, i.getID(), afterIf.getID());
 						duchain.addDefUse(var, lastIfElseBlock.getDefinitionForVariable(var), loc2, i.getID(), afterIf.getID());
@@ -304,13 +307,6 @@ public class Compiler {
 					for(String var : lastLoopBlock.getChangedVariables()) {
 						VariableArg loc1 = lastLoopBlock.getVariable(var);
 						VariableArg loc2 = currBB.getVariable(var);
-
-						if(var.equals("b")) {
-							System.out.println("FOUND B!!!!");
-							System.out.println("Loc1 " + loc1);
-							System.out.println("Loc2 " + loc2);
-							System.out.println("bbid " + lastLoopBlock.getID());
-						}
 						
 						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
@@ -520,13 +516,24 @@ public class Compiler {
 			Instruction i = Instruction.getInstructionByID(use.getUseLocation());
 			for(int a = 0; a < i.args.length; a++) {
 				Argument arg = i.args[a];
-				if(arg instanceof VariableArg) {
+				if(arg.equals(use.getArgumentForVariable())) {
+					assert arg.isVariable();
 					VariableArg v = (VariableArg)arg;
-					if(v.getDef().equals(def)) {
-						i.args[a] = new VariableArg(v.getVariableName(), newArg ,newDef);
-						duchain.removeDefUse(use);
-						duchain.addDefUse(v.getVariableName(), newDef, i.args[a], i.getID(), use.getBasicBlockID());
+					
+					if(v instanceof CopiedVariable) {
+						//If the use came from copy propagation make sure the copy happened after the stop point
+						//   e.g. it was not copied before a while loop to a variable that is being replaced
+						CopiedVariable cv = (CopiedVariable)v;
+						if(cv.getBasicBlockID().getID() < stop.getID())
+							continue;//TODO: test this functionality, i think it may still be wrong
+						//TODO: maybe condition on the type of oldarg
+						//  if old arg is a copy itself or not
 					}
+					
+					i.args[a] = i.args[a].clone();
+					((VariableArg)i.args[a]).updateValueAndDef(newArg,newDef);
+					duchain.removeDefUse(use);
+					duchain.addDefUse(v.getVariableName(), newDef, i.args[a], i.getID(), use.getBasicBlockID());
 				}
 			}
 			
@@ -536,9 +543,9 @@ public class Compiler {
 	
 	public void addPossibleUse(BasicBlock bb, InstructionID id, Argument... args) {
 		for(Argument arg : args) {
-			if(arg instanceof VariableArg) {
+			if(arg.isVariable()) {
 				VariableArg v = ((VariableArg)arg);
-				duchain.addDefUse(v.getVariableName(), v.getDef(), v.getValue(), id, bb.getID());
+				duchain.addDefUse(v.getVariableName(), v.getDef(), v, id, bb.getID());
 			}
 		}
 	}
