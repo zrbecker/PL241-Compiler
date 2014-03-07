@@ -299,6 +299,7 @@ public class Compiler {
 				if(lastLoopBlock.isReturnBlock()) {
 					afterLoop.copyAllTablesFrom(condition);
 				} else {
+					//TODO: third location to look at for zach
 					//Have the loop branch back to the condition
 					lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
 	
