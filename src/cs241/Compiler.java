@@ -238,8 +238,8 @@ public class Compiler {
 						//Implicit store instruction to make a def
 						Instruction t = Instruction.makeInstruction(InstructionType.MOVE,i.getID(), new DesName(var));
 
-						duchain.addDefUse(var, lastIfThenBlock.getDefinitionForVariable(var), loc1, i.getID(), afterIf.getID());
-						duchain.addDefUse(var, lastIfElseBlock.getDefinitionForVariable(var), loc2, i.getID(), afterIf.getID());
+						duchain.addDefUse(lastIfThenBlock.getDefinitionForVariable(var), loc1, i.getID(), afterIf.getID());
+						duchain.addDefUse(lastIfElseBlock.getDefinitionForVariable(var), loc2, i.getID(), afterIf.getID());
 						afterIf.appendInstruction(i);
 						afterIf.updateVariable(var, i.getID(), t.getID());
 					}
@@ -303,7 +303,6 @@ public class Compiler {
 				if(lastLoopBlock.isReturnBlock()) {
 					afterLoop.copyAllTablesFrom(condition);
 				} else {
-					//TODO: third location to look at for zach
 					//Have the loop branch back to the condition
 					lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
 	
@@ -320,8 +319,8 @@ public class Compiler {
 						replaceRefs(var, currBB.getDefinitionForVariable(var), t.getID(), loc2, i.getID(), condition.getID());
 						
 						//Only add the phi as a possible use after the replacement
-						duchain.addDefUse(var, lastLoopBlock.getDefinitionForVariable(var), loc1, i.getID(), condition.getID());
-						duchain.addDefUse(var, currBB.getDefinitionForVariable(var), loc2, i.getID(), condition.getID());
+						duchain.addDefUse(lastLoopBlock.getDefinitionForVariable(var), loc1, i.getID(), condition.getID());
+						duchain.addDefUse(currBB.getDefinitionForVariable(var), loc2, i.getID(), condition.getID());
 						
 						condition.prependInstruction(i);
 						afterLoop.updateVariable(var, i.getID(), t.getID());
@@ -521,22 +520,24 @@ public class Compiler {
 			Instruction i = Instruction.getInstructionByID(use.getUseLocation());
 			for(int a = 0; a < i.args.length; a++) {
 				Argument arg = i.args[a];
+
 				if(arg.equals(use.getArgumentForVariable())) {
 					assert arg.isVariable();
 					VariableArg v = (VariableArg)arg;
 					
 					if(v instanceof CopiedVariable) {
-						//If the use came from copy propagation make sure the original copy happened after the stop point
-						//   e.g. it was not copied before a while loop to a variable that is being replaced
-						CopiedVariable cv = (CopiedVariable)v;
-						if(cv.getBasicBlockIDOfCopy().getID() < stop.getID())
-							continue;//TODO: go through this functionality with zach to check
+						CopiedVariable cvArg = (CopiedVariable)v;
+						if(!cvArg.copyOf(oldArg)) {
+							continue;
+						}
+					} else if(oldArg instanceof CopiedVariable){
+						continue;
 					}
 					
 					i.args[a] = i.args[a].clone();
 					((VariableArg)i.args[a]).updateValueAndDef(newArg,newDef);
 					duchain.removeDefUse(use);
-					duchain.addDefUse(v.getVariableName(), newDef, i.args[a], i.getID(), use.getBasicBlockID());
+					duchain.addDefUse(newDef, i.args[a], i.getID(), use.getBasicBlockID());
 				}
 			}
 			
@@ -548,7 +549,7 @@ public class Compiler {
 		for(Argument arg : args) {
 			if(arg.isVariable()) {
 				VariableArg v = ((VariableArg)arg);
-				duchain.addDefUse(v.getVariableName(), v.getDef(), v, id, bb.getID());
+				duchain.addDefUse(v.getDef(), v, id, bb.getID());
 			}
 		}
 	}

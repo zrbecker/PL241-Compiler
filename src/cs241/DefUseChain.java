@@ -8,23 +8,17 @@ import cs241.Argument.InstructionID;
 
 public class DefUseChain {
 	public class DefUse {
-		private String variable;
 		private InstructionID defInstruction;//The line where the value was deffed
 		private Argument arg;//The value assigned at the def
 		private InstructionID useInstruction;//The location of the use
 		private BasicBlockID bbID;//Basic block of use
 		private DefUse prevDU;
 		private DefUse nextDU;
-		private DefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b) {
-			variable = v;
+		private DefUse(InstructionID d, Argument a, InstructionID u, BasicBlockID b) {
 			defInstruction = d;
 			arg = a;
 			useInstruction = u;
 			bbID = b;
-		}
-		
-		public String getVariable() {
-			return variable;
 		}
 		
 		public Argument getArgumentForVariable() {
@@ -58,8 +52,8 @@ public class DefUseChain {
 		varToMostRecent = new HashMap<InstructionID,DefUse>();
 	}
 	
-	public void addDefUse(String v, InstructionID d, Argument a, InstructionID u, BasicBlockID b)  {
-		DefUse use = new DefUse(v, d, a, u, b);
+	public void addDefUse(InstructionID d, Argument a, InstructionID u, BasicBlockID b)  {
+		DefUse use = new DefUse(d, a, u, b);
 		DefUse prev = varToMostRecent.get(d);
 		if(prev != null) {
 			prev.nextDU = use;

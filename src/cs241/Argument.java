@@ -179,7 +179,11 @@ public abstract class Argument {
 			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd);
 		}
 		public CopiedVariable(String cvr, CopiedVariable v, InstructionID cd) {
-			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd);
+			super(v.getVariableName(),v.getValue(),v.getDef());
+			copiedVars = new ArrayList<String>(v.getCopyChain());
+			copiedVars.add(cvr);
+			copyDefs = new ArrayList<InstructionID>(v.getCopyDefs());
+			copyDefs.add(cd);
 		}
 		public void addCopy(String c, InstructionID d) {
 			copiedVars.add(c);
@@ -206,9 +210,29 @@ public abstract class Argument {
 			}
 			return true;
 		}
+		
+		public boolean copyOf(VariableArg v) {
+			if(!super.equals(v))
+				return false;
+			if(!(v instanceof CopiedVariable))
+				return true;
+			CopiedVariable cv = (CopiedVariable)v;
+			if(cv.getCopyChain().size() > copiedVars.size())
+				return false;
+			for(int i = 0; i < cv.getCopyChain().size(); i++) {
+				if(!copiedVars.get(i).equals(cv.getCopyChain().get(i))) {
+					return false;
+				}
+				if(!copyDefs.get(i).equals(cv.getCopyDefs().get(i))) {
+					return false;
+				}
+			}
+			return true;
+		}
+		
 		public String toString() {
 			StringBuilder sb = new StringBuilder();
-			for(int i = 0; i < copiedVars.size(); i++) {
+			for(int i = copiedVars.size() - 1; i >= 0; i--) {
 				sb.append(copiedVars.get(i));
 				sb.append(".");
 				sb.append(copyDefs.get(i));

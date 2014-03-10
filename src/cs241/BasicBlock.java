@@ -124,10 +124,10 @@ public class BasicBlock {
 	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
 		VariableArg v;
-		if(arg instanceof CopiedVariable) {//TODO: check this line with replacerefs line with zach
-			v = new CopiedVariable(var,(VariableArg)arg,((CopiedVariable)arg).getCopyDef(),((CopiedVariable)arg).getBasicBlockIDOfCopy());
+		if(arg instanceof CopiedVariable) {
+			v = new CopiedVariable(var,(CopiedVariable)arg,defInstructionID);
 		} else if(arg instanceof VariableArg) {
-			v = new CopiedVariable(var,(VariableArg)arg,defInstructionID,bbID);
+			v = new CopiedVariable(var,(VariableArg)arg,defInstructionID);
 		} else {
 			v = new VariableArg(var,arg,defInstructionID);
 		}
