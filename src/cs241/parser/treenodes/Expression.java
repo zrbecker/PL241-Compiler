@@ -54,13 +54,15 @@ public abstract class Expression {
 	public static class Designator extends Expression {
 		String name;
 		ArrayList<Expression> indices;
+		boolean isGlobal;
 		
-		public Designator(String name) {
-			this(name, null);
+		public Designator(String name, boolean isGlobal) {
+			this(name, isGlobal, null);
 		}
 		
-		public Designator(String name, ArrayList<Expression> indices) {
+		public Designator(String name, boolean isGlobal, ArrayList<Expression> indices) {
 			this.name = name;
+			this.isGlobal = isGlobal;
 			this.indices = indices;
 		}
 		
@@ -70,6 +72,10 @@ public abstract class Expression {
 		
 		public ArrayList<Expression> getIndices() {
 			return indices;
+		}
+		
+		public boolean isGlobal() {
+			return isGlobal;
 		}
 	}
 	

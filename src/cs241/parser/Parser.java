@@ -2,6 +2,7 @@ package cs241.parser;
 
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import cs241.parser.treenodes.Computation;
 import cs241.parser.treenodes.Expression;
@@ -15,6 +16,9 @@ public class Parser {
 	Scanner scanner;
 	Token token;
 	int tokenCount;
+	
+	String currentFunction = "main";
+	HashMap<String, ArrayList<String>> nameLists = new HashMap<String, ArrayList<String>>();
 
 	public Parser() {
 		
@@ -83,6 +87,8 @@ public class Parser {
 		
 		parseTokens(Token.Type.KEYWORD_MAIN);
 		
+		currentFunction = "main";
+		nameLists.put(currentFunction, new ArrayList<String>());
 		if (isVariableDeclaration()) {
 			variables = new ArrayList<Variable>();
 			do {
@@ -113,12 +119,25 @@ public class Parser {
 	ArrayList<Variable> parseVariableDeclaration() throws ParserException {
 		ArrayList<Variable> variables = new ArrayList<Variable>();
 		
+		String name;
+		ArrayList<String> names;
+		
 		switch (parseTokens(Token.Type.KEYWORD_VAR, Token.Type.KEYWORD_ARRAY)) {
 		case KEYWORD_VAR:
-			variables.add(new Variable(parseIdentifier()));
+			name = parseIdentifier();
+			names = nameLists.get(currentFunction);
+			if (names.contains(name))
+				throw new ParserException("Found duplication name '" + name + "'");
+			names.add(name);
+			variables.add(new Variable(name));
 			while (isTokens(Token.Type.COMMA)) {
 				nextToken();
-				variables.add(new Variable(parseIdentifier()));
+				name = parseIdentifier();
+				names = nameLists.get(currentFunction);
+				if (names.contains(name))
+					throw new ParserException("Found duplication name '" + name + "'");
+				names.add(name);
+				variables.add(new Variable(name));
 			}
 			break;
 		
@@ -129,13 +148,24 @@ public class Parser {
 				dimensions.add(parseNumber());
 				parseTokens(Token.Type.RIGHT_BRACKET);
 			} while (isTokens(Token.Type.LEFT_BRACKET));
-			
-			variables.add(new Variable(parseIdentifier()));
+
+			name = parseIdentifier();
+			names = nameLists.get(currentFunction);
+			if (names.contains(name))
+				throw new ParserException("Found duplication name '" + name + "'");
+			names.add(name);
+			variables.add(new Variable(name, dimensions));
 			while (isTokens(Token.Type.COMMA)) {
 				nextToken();
-				variables.add(new Variable(parseIdentifier(), dimensions));
+				name = parseIdentifier();
+				names = nameLists.get(currentFunction);
+				if (names.contains(name))
+					throw new ParserException("Found duplication name '" + name + "'");
+				names.add(name);
+				variables.add(new Variable(name, dimensions));
 			}
 			break;
+			
 		default:
 			throw new ParserException("Expected variable declaration");
 		}
@@ -161,14 +191,28 @@ public class Parser {
 		String name = parseIdentifier();
 		ArrayList<String> parameters = null;
 		
+		currentFunction = name;
+		nameLists.put(name, new ArrayList<String>());
+		
 		if (isTokens(Token.Type.LEFT_PARANTHESIS)) {
 			nextToken();
 			if (!isTokens(Token.Type.RIGHT_PARANTHESIS)) {
 				parameters = new ArrayList<String>();
-				parameters.add(parseIdentifier());
+				
+				String paramName = parseIdentifier();
+				ArrayList<String> names = nameLists.get(currentFunction);
+				if (names.contains(paramName))
+					throw new ParserException("Found duplication name '" + paramName + "'");
+				names.add(paramName);
+				parameters.add(paramName);
 				while (isTokens(Token.Type.COMMA)) {
 					nextToken();
-					parameters.add(parseIdentifier());
+					paramName = parseIdentifier();
+					names = nameLists.get(currentFunction);
+					if (names.contains(paramName))
+						throw new ParserException("Found duplication name '" + paramName + "'");
+					names.add(paramName);
+					parameters.add(paramName);
 				}
 			}
 			parseTokens(Token.Type.RIGHT_PARANTHESIS);
@@ -317,6 +361,18 @@ public class Parser {
 	
 	Expression.Designator parseDesignator() throws ParserException {
 		String name = parseIdentifier();
+		boolean isGlobal = false;
+		
+		ArrayList<String> names = nameLists.get(currentFunction);
+		// Check is variable is valid local variable name
+		if (!names.contains(name)) {
+			names = nameLists.get("main");
+			// Check is variable is valid global variable name
+			if (!names.contains(name))
+				throw new ParserException("Invalid variable name '" + name + "'");
+			isGlobal = true;
+		}
+		
 		ArrayList<Expression> indices = null;
 		while (isTokens(Token.Type.LEFT_BRACKET)) {
 			if (indices == null)
@@ -325,7 +381,8 @@ public class Parser {
 			indices.add(parseExpression());
 			parseTokens(Token.Type.RIGHT_BRACKET);
 		}
-		return new Expression.Designator(name, indices);
+		
+		return new Expression.Designator(name, isGlobal, indices);
 	}
 	
 	Expression.FunctionCallExp parseFunctionCallExpression() throws ParserException {
