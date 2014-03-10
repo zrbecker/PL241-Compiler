@@ -39,6 +39,7 @@ import cs241.parser.treenodes.Statement.FunctionCall;
 import cs241.parser.treenodes.Statement.If;
 import cs241.parser.treenodes.Statement.Return;
 import cs241.parser.treenodes.Statement.While;
+import cs241.vcg.ControlFlowGraphVCG;
 
 public class Compiler {
 	File inputFile;
@@ -89,6 +90,9 @@ public class Compiler {
 		for(BasicBlock fbb : functionBBs) {
 			System.out.println(fbb);
 		}
+		
+		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
+		exporter.exportAsVCG("test.vcg", mainRoot);
 	}
 	
 	public Computation getParseTree() throws FileNotFoundException {

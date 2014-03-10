@@ -59,6 +59,14 @@ public class BasicBlock {
 		idToBB.put(bbID, this);
 		nextBBID++;
 	}
+	
+	public List<BasicBlock> getChildren() {
+		return children;
+	}
+	
+	public List<Instruction> getInstructions() {
+		return instructions;
+	}
 
 	public void addChild(BasicBlock c) {
 		children.add(c);
