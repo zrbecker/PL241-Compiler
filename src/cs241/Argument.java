@@ -1,5 +1,8 @@
 package cs241;
 
+import java.util.ArrayList;
+import java.util.List;
+
 
 public abstract class Argument {
 	
@@ -163,35 +166,63 @@ public abstract class Argument {
 		}
 	}
 	public static class CopiedVariable extends VariableArg {
-		private String copiedVar;
-		private InstructionID copyDef;
-		private BasicBlockID bbID;//Basic block of the def
-		public CopiedVariable(String cvr, String vr, Argument vl, InstructionID d, InstructionID cd, BasicBlockID b) {
+		private List<String> copiedVars;
+		private List<InstructionID> copyDefs;
+		public CopiedVariable(String cvr, String vr, Argument vl, InstructionID d, InstructionID cd) {
 			super(vr,vl,d);
-			copiedVar = cvr;
-			copyDef = cd;
-			bbID = b;
+			copiedVars = new ArrayList<String>();
+			copiedVars.add(cvr);
+			copyDefs = new ArrayList<InstructionID>();
+			copyDefs.add(cd);
 		}
-		public CopiedVariable(String cvr, VariableArg v, InstructionID cd, BasicBlockID b) {
-			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd,b);
+		public CopiedVariable(String cvr, VariableArg v, InstructionID cd) {
+			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd);
 		}
-		public String getCopiedVar() {
-			return copiedVar;
+		public CopiedVariable(String cvr, CopiedVariable v, InstructionID cd) {
+			this(cvr,v.getVariableName(),v.getValue(),v.getDef(),cd);
 		}
-		public InstructionID getCopyDef() {
-			return copyDef;
+		public void addCopy(String c, InstructionID d) {
+			copiedVars.add(c);
+			copyDefs.add(d);
 		}
-		public BasicBlockID getBasicBlockIDOfCopy() {
-			return bbID;
+		public List<String> getCopyChain() {
+			return copiedVars;
+		}
+		public List<InstructionID> getCopyDefs() {
+			return copyDefs;
 		}
 		public boolean equals(CopiedVariable v) {
-			return super.equals((VariableArg)v) && copiedVar.equals(v.copiedVar) && copyDef.equals(v.copyDef) && bbID.equals(v.bbID);
+			if(!super.equals((VariableArg)v))
+				return false;
+			if(copiedVars.size() != v.getCopyChain().size())
+				return false;
+			for(int i = 0; i < copiedVars.size(); i++) {
+				if(!copiedVars.get(i).equals(v.getCopyChain().get(i))) {
+					return false;
+				}
+				if(!copyDefs.get(i).equals(v.getCopyDefs().get(i))) {
+					return false;
+				}
+			}
+			return true;
 		}
 		public String toString() {
-			return copiedVar + "." + copyDef + "." + bbID + ".copyof." + super.toString();
+			StringBuilder sb = new StringBuilder();
+			for(int i = 0; i < copiedVars.size(); i++) {
+				sb.append(copiedVars.get(i));
+				sb.append(".");
+				sb.append(copyDefs.get(i));
+				sb.append(".copyof.");
+			}
+			sb.append(super.toString());
+			return sb.toString();
 		}
 		public Argument clone() {
-			return new CopiedVariable(copiedVar,(VariableArg)super.clone(),copyDef,bbID);
+			CopiedVariable cv = new CopiedVariable(copiedVars.get(0),(VariableArg)super.clone(),copyDefs.get(0));
+			for(int i = 1; i < copiedVars.size(); i++) {
+				cv.addCopy(copiedVars.get(i), copyDefs.get(i));
+			}
+			return cv;
 		}
 	}
 }
