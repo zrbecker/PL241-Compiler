@@ -32,7 +32,7 @@ public class Instruction {
 		RETURN,
 		LOADADD, //For arrays only
 		STOREADD, //For arrays only
-		FUNCTION //TODO: remove FUNCTION
+		FUNCTION
 	}
 
 	private static int nextInstructionID = 1;

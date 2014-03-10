@@ -9,9 +9,9 @@ import java.util.Map;
 import java.util.Set;
 
 import cs241.Argument.BasicBlockID;
+import cs241.Argument.CopiedVariable;
 import cs241.Argument.InstructionID;
 import cs241.Argument.VariableArg;
-import cs241.Argument.CopiedVariable;
 import cs241.Instruction.InstructionType;
 
 /**`
@@ -23,6 +23,7 @@ public class BasicBlock {
 	List<BasicBlock> parents;
 	private BasicBlock next;
 	private BasicBlock prev;
+	private Instruction branch;
 	
 	//Dominator tree
 	BasicBlock dominator;
@@ -74,6 +75,14 @@ public class BasicBlock {
 
 	public void addParent(BasicBlock p) {
 		parents.add(p);
+	}
+	
+	public Instruction getBranchInstruction() {
+		return branch;
+	}
+	
+	public void setBranchInstruction(Instruction b) {
+		branch = b;
 	}
 	
 	public void setDominator(BasicBlock d) {
@@ -167,9 +176,34 @@ public class BasicBlock {
 		for(Instruction i : instructions) {
 			sb.append(i.toString());
 		}
+		
+		if(branch != null)
+			sb.append(branch.toString());
+		
 		if(next != null)
 			sb.append(next.toString());
 		
 		return sb.toString();
+	}
+	
+	/*
+	 * Forget information about variables
+	 * All arguments should be instructions, values, etc. not variables or copies
+	 */
+	public void simplify() {
+		List<Instruction> newIns = new LinkedList<Instruction>();
+		for(Instruction i : instructions) {
+			if(i.type == InstructionType.MOVE)
+				continue;
+			for(int j = 0; j < i.args.length; j++) {
+				if(i.args[j] instanceof VariableArg) {
+					i.args[j] = ((VariableArg)i.args[j]).getValue();
+				}
+			}
+			newIns.add(i);
+		}
+		instructions = newIns;
+		if(next != null)
+			next.simplify();
 	}
 }

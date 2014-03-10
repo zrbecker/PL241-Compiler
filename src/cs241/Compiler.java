@@ -50,6 +50,8 @@ public class Compiler {
 	Map<String,Function> functions;
 	Set<String> globalVariables;
 
+	private Set<InstructionType> expressionInstructions;
+	
 	public Compiler(File in, File out) {
 		inputFile = in;
 		outputFile = out;
@@ -58,6 +60,13 @@ public class Compiler {
 		duchain = new DefUseChain();
 		functions = new HashMap<String,Function>();
 		globalVariables = new HashSet<String>();
+		expressionInstructions  = new HashSet<InstructionType>();
+		expressionInstructions.add(InstructionType.ADD);
+		expressionInstructions.add(InstructionType.DIV);
+		expressionInstructions.add(InstructionType.MUL);
+		expressionInstructions.add(InstructionType.NEG);
+		expressionInstructions.add(InstructionType.PHI);
+		expressionInstructions.add(InstructionType.SUB);
 	}
 
 	public void compile() throws FileNotFoundException {
@@ -86,6 +95,20 @@ public class Compiler {
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
 		
+		//Simplify arguments
+		mainRoot.simplify();
+		for(BasicBlock bb : functionBBs) {
+			bb.simplify();
+		}
+		
+		//TODO: need to expand storeadd, loadadd instructions
+		
+		//Run common subexpression elimination
+		cse(mainRoot);
+		for(BasicBlock bb : functionBBs) {
+			cse(bb);
+		}
+		
 		System.out.println(mainRoot);
 		for(BasicBlock fbb : functionBBs) {
 			System.out.println(fbb);
@@ -94,7 +117,7 @@ public class Compiler {
 		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
 		exporter.exportAsVCG("test.vcg", mainRoot);
 	}
-	
+
 	public Computation getParseTree() throws FileNotFoundException {
 		Reader reader = new FileReader(inputFile);
 		try {
@@ -207,7 +230,7 @@ public class Compiler {
 				BasicBlock lastIfElseBlock = ifElse;
 				if(!thenOnly) {
 					//Add the branch from the ifthen to after the ifelse
-					lastIfThenBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.getID()));
+					lastIfThenBlock.setBranchInstruction(Instruction.makeInstruction(InstructionType.BRA,afterIf.getID()));
 					lastIfElseBlock = compileIntoBBs(currIf.getElseBlock(), ifElse);
 				}
 				
@@ -304,7 +327,7 @@ public class Compiler {
 					afterLoop.copyAllTablesFrom(condition);
 				} else {
 					//Have the loop branch back to the condition
-					lastLoopBlock.appendInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
+					lastLoopBlock.setBranchInstruction(Instruction.makeInstruction(InstructionType.BRA,condition.getID()));
 	
 					//Set up the phi instructions and variable lookup table
 					afterLoop.copyAllTablesFrom(currBB);
@@ -385,7 +408,7 @@ public class Compiler {
 			it = null;
 			System.out.println("Error unexpected comparision operator.");
 		}
-		bb.appendInstruction(Instruction.makeInstruction(it,branchLocation));
+		bb.setBranchInstruction(Instruction.makeInstruction(it,branchLocation));
 	}
 	
 	/*
@@ -552,5 +575,17 @@ public class Compiler {
 				duchain.addDefUse(v.getDef(), v, id, bb.getID());
 			}
 		}
+	}
+	
+	
+	public void cse(BasicBlock bb) {
+		Map<InstructionType,List<Instruction>> m = new HashMap<InstructionType,List<Instruction>>();
+		for(InstructionType it : expressionInstructions)
+			m.put(it, new LinkedList<Instruction>());
+		cse(bb,new HashMap<InstructionID,Argument>(), m);
+	}
+	
+	public void cse(BasicBlock bb, Map<InstructionID,Argument> replacement, Map<InstructionType,List<Instruction>> lookup) {
+		
 	}
 }
