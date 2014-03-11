@@ -101,8 +101,9 @@ public class Compiler {
 			bb.simplify();
 		}
 		
-		//TODO: need to expand storeadd, loadadd instructions
+		//TODO: need to expand storeadd, loadadd instructions, before doing cse and constant propagation
 		
+		//We've changed the instructions so create a new def-use chain
 		duchain = new DefUseChain();
 		createNewDefUseChain(mainRoot);
 		for(BasicBlock bb : functionBBs) {
@@ -114,7 +115,8 @@ public class Compiler {
 		for(BasicBlock bb : functionBBs) {
 			runCommonSubexpressionEliminationAndCopyPropagation(bb);
 		}
-		
+
+		//We've changed the instructions so create a new def-use chain
 		duchain = new DefUseChain();
 		createNewDefUseChain(mainRoot);
 		for(BasicBlock bb : functionBBs) {
