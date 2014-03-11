@@ -103,10 +103,22 @@ public class Compiler {
 		
 		//TODO: need to expand storeadd, loadadd instructions
 		
-		//Run common subexpression elimination
-		cse(mainRoot);
+		duchain = new DefUseChain();
+		createNewDefUseChain(mainRoot);
 		for(BasicBlock bb : functionBBs) {
-			cse(bb);
+			createNewDefUseChain(bb);
+		}
+		
+		//Run common subexpression elimination
+		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
+		for(BasicBlock bb : functionBBs) {
+			runCommonSubexpressionEliminationAndCopyPropagation(bb);
+		}
+		
+		duchain = new DefUseChain();
+		createNewDefUseChain(mainRoot);
+		for(BasicBlock bb : functionBBs) {
+			createNewDefUseChain(bb);
 		}
 		
 		System.out.println(mainRoot);
@@ -577,15 +589,136 @@ public class Compiler {
 		}
 	}
 	
+	private void createNewDefUseChain(BasicBlock bb) {
+		for(Instruction i : bb.getInstructions()) {
+			for(Argument a : i.args) {
+				if(a instanceof InstructionID)
+					duchain.addDefUse((InstructionID)a, a, i.getID(), bb.getID());
+			}
+		}
+		if(bb.getNext() != null)
+			createNewDefUseChain(bb.getNext());
+	}
 	
-	public void cse(BasicBlock bb) {
+	public void runCommonSubexpressionEliminationAndCopyPropagation(BasicBlock bb) {
 		Map<InstructionType,List<Instruction>> m = new HashMap<InstructionType,List<Instruction>>();
 		for(InstructionType it : expressionInstructions)
 			m.put(it, new LinkedList<Instruction>());
-		cse(bb,new HashMap<InstructionID,Argument>(), m);
+		runConstantPropagation(bb);
+		runCommonSubexpressionElimination(bb, m);
 	}
 	
-	public void cse(BasicBlock bb, Map<InstructionID,Argument> replacement, Map<InstructionType,List<Instruction>> lookup) {
+	private void runConstantPropagation(BasicBlock bb) {
+		for(int i = 0; i < bb.getInstructions().size(); i++) {
+			Instruction ins = bb.getInstructions().get(i);
+			InstructionType it = ins.type;
+
+			//Attempt to eliminate any expression of only values
+			if(expressionInstructions.contains(it)) {
+				if(it != InstructionType.PHI) {
+					boolean allValues = true;
+					for(Argument a : ins.args) {
+						if(!(a instanceof Value))
+							allValues = false;
+					}
+					if(allValues) {
+						Value v = evaluate(ins);
+						DefUse du = duchain.getMostRecentDefUse(ins.getID());
+						while(du != null) {
+							Instruction use = Instruction.getInstructionByID(du.getUseLocation());
+							for(int j = 0; j < use.args.length; j++) {
+								if(use.args[j].equals(ins.getID())) {
+									use.args[j] = v;
+								}
+							}
+							du = du.getPreviousDefUse();
+						}
+						bb.getInstructions().remove(i);
+						i--;
+						continue;
+					}
+				}
+			}
+		}
 		
+		//Recurse into the next block
+		if(bb.getNext() != null)
+			runConstantPropagation(bb.getNext());
+	}
+
+	private void runCommonSubexpressionElimination(BasicBlock bb, Map<InstructionType,List<Instruction>> lookup) {
+		for(int i = 0; i < bb.getInstructions().size(); i++) {
+			Instruction ins = bb.getInstructions().get(i);
+			InstructionType it = ins.type;
+			
+			if(expressionInstructions.contains(it)) {
+				//Check if this is dominated by an identical expression
+				List<Instruction> l = lookup.get(it);
+				Instruction replace = lookForCopy(ins,l);
+				
+				if(replace != null) {
+					DefUse du = duchain.getMostRecentDefUse(ins.getID());
+					while(du != null) {
+						Instruction use = Instruction.getInstructionByID(du.getUseLocation());
+						for(int j = 0; j < use.args.length; j++) {
+							if(use.args[j].equals(ins.getID())) {
+								use.args[j] = replace.getID();
+							}
+						}
+						du = du.getPreviousDefUse();
+					}
+					
+					bb.getInstructions().remove(i);
+					i--;
+					continue;
+				}
+				
+				//Add to the list of expressions if not replaced yet
+				l.add(ins);
+			}
+		}
+		
+		//Recurse into dominated blocks
+		for(BasicBlock bbDom : bb.dominated) {
+			runCommonSubexpressionElimination(bbDom, new HashMap<InstructionType,List<Instruction>>(lookup));
+		}
+	}
+
+	private Instruction lookForCopy(Instruction ins, List<Instruction> l) {
+		for(Instruction ins2 : l) {
+			if(ins.args.length == ins2.args.length) {
+				boolean same = true;
+				for(int i = 0; i < ins.args.length; i++) {
+					if(!ins.args[i].equals(ins2.args[i])) {
+						same = false;
+					}
+				}
+				if(same)
+					return ins2;
+			}
+		}
+		return null;
+	}
+
+	/*
+	 * The input, ins, should be an expression type
+	 */
+	private Value evaluate(Instruction ins) {
+		InstructionType it = ins.type;
+		
+		switch(it) {
+			case ADD:
+				return new Value(((Value)ins.args[0]).getValue() + ((Value)ins.args[1]).getValue());
+			case DIV:
+				return new Value(((Value)ins.args[0]).getValue() / ((Value)ins.args[1]).getValue());
+			case MUL:
+				return new Value(((Value)ins.args[0]).getValue() * ((Value)ins.args[1]).getValue());
+			case NEG:
+				return new Value(-1*((Value)ins.args[0]).getValue());
+			case SUB:
+				return new Value(((Value)ins.args[0]).getValue() - ((Value)ins.args[1]).getValue());
+			default:
+				return null;
+		}
 	}
 }
