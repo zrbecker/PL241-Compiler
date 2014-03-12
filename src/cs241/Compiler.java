@@ -48,6 +48,7 @@ public class Compiler {
 	BasicBlock mainRoot;
 	DefUseChain duchain;
 	Map<String,Function> functions;
+	List<BasicBlock> functionBBs;
 	Set<String> globalVariables;
 
 	private Set<InstructionType> expressionInstructions;
@@ -59,6 +60,7 @@ public class Compiler {
 		mainRoot = new BasicBlock();
 		duchain = new DefUseChain();
 		functions = new HashMap<String,Function>();
+		functionBBs = new ArrayList<BasicBlock>();
 		globalVariables = new HashSet<String>();
 		expressionInstructions  = new HashSet<InstructionType>();
 		expressionInstructions.add(InstructionType.ADD);
@@ -78,7 +80,6 @@ public class Compiler {
 		
 		//TODO: worry about variable and function param/variable parts
 		//Compile the functions present in the code
-		List<BasicBlock> functionBBs = new ArrayList<BasicBlock>();
 		if(c.getFunctions() != null) {
 			for(Function func : c.getFunctions()) {
 				functions.put(func.getName(), func);
@@ -95,33 +96,30 @@ public class Compiler {
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
 		
-		//Simplify arguments
+		//Simplify arguments and create new DefUse chain
 		mainRoot.simplify();
 		for(BasicBlock bb : functionBBs) {
 			bb.simplify();
 		}
+		refreshDefUseChain();
 		
-		//TODO: need to expand storeadd, loadadd instructions, before doing cse and constant propagation
-		
-		//We've changed the instructions so create a new def-use chain
-		duchain = new DefUseChain();
-		createNewDefUseChain(mainRoot);
+		//Replace STOREADD and LOADADD with ADD, MUL, STORE, and LOAD
+		removeArrayOps(mainRoot);
 		for(BasicBlock bb : functionBBs) {
-			createNewDefUseChain(bb);
+			removeArrayOps(bb);
 		}
+		refreshDefUseChain();
+		
 		
 		//Run common subexpression elimination
 		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
 		for(BasicBlock bb : functionBBs) {
 			runCommonSubexpressionEliminationAndCopyPropagation(bb);
 		}
+		refreshDefUseChain();
 
-		//We've changed the instructions so create a new def-use chain
-		duchain = new DefUseChain();
-		createNewDefUseChain(mainRoot);
-		for(BasicBlock bb : functionBBs) {
-			createNewDefUseChain(bb);
-		}
+		//TODO: eliminate phis
+		//TODO: register allocation!!!
 		
 		System.out.println(mainRoot);
 		for(BasicBlock fbb : functionBBs) {
@@ -591,6 +589,14 @@ public class Compiler {
 		}
 	}
 	
+	private void refreshDefUseChain() {
+		duchain = new DefUseChain();
+		createNewDefUseChain(mainRoot);
+		for(BasicBlock bb : functionBBs) {
+			createNewDefUseChain(bb);
+		}
+	}
+	
 	private void createNewDefUseChain(BasicBlock bb) {
 		for(Instruction i : bb.getInstructions()) {
 			for(Argument a : i.args) {
@@ -600,6 +606,14 @@ public class Compiler {
 		}
 		if(bb.getNext() != null)
 			createNewDefUseChain(bb.getNext());
+	}
+
+	private void removeArrayOps(BasicBlock bb) {
+		for(int i = 0; i < bb.getInstructions().size(); i++) {
+			if(bb.instructions.get(i).type == InstructionType.LOADADD || bb.instructions.get(i).type == InstructionType.STOREADD) {
+				
+			}
+		}
 	}
 	
 	public void runCommonSubexpressionEliminationAndCopyPropagation(BasicBlock bb) {
