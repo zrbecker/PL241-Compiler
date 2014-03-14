@@ -122,10 +122,10 @@ public class Compiler {
 		
 		
 		//Run common subexpression elimination
-		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
-		for(BasicBlock bb : functionBBs.values()) {
-			runCommonSubexpressionEliminationAndCopyPropagation(bb);
-		}
+//		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
+//		for(BasicBlock bb : functionBBs.values()) {
+//			runCommonSubexpressionEliminationAndCopyPropagation(bb);
+//		}
 		refreshDefUseChain();
 
 		//TODO: setup default value for variables
@@ -622,7 +622,7 @@ public class Compiler {
 	private void removeArrayOps(BasicBlock bb, Map<String,Variable> variables) {
 		for(int i = 0; i < bb.getInstructions().size(); i++) {
 			Instruction in = bb.instructions.get(i);
-			if(in.type == InstructionType.LOADADD || in.type == InstructionType.STOREADD) {
+			if(in.type == InstructionType.LOADADD) {
 				DesName arrName = (DesName)in.args[0];
 				Variable v = variables.get(arrName.getName());
 				List<Integer> dims = v.getDimensions();
@@ -630,17 +630,53 @@ public class Compiler {
 					bb.instructions.remove(i);
 					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.LOAD, in.args));
 				} else {
-					
-					List<Integer> partials = new ArrayList<Integer>();
+					int[] partials = new int[dims.size()];
 					int prod = 1;
 					for(int j = dims.size() - 1; j >= 0; j--) {
-						partials.add(prod,j);
+						partials[j] = prod;
 						prod*=dims.get(j);
 					}
-					Instruction prev = Instruction.makeInstruction(InstructionType.MUL, in.args[1], new Value(partials.get(0)));
-					for(int j = 1; j < in.args.length-1; j++) {
-						
+					bb.instructions.remove(i);
+					Instruction res = Instruction.makeInstruction(InstructionType.MUL, in.args[1], new Value(partials[0]));
+					bb.instructions.add(i,res);
+					i++;
+					for(int j = 2; j < in.args.length-1; j++) {
+						Instruction next = Instruction.makeInstruction(InstructionType.MUL, in.args[j], new Value(partials[j-1]));
+						bb.instructions.add(i,next);
+						i++;
+						res = Instruction.makeInstruction(InstructionType.ADD, next.getID(), res.getID());
+						bb.instructions.add(i,res);
+						i++;
 					}
+					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.LOAD, arrName,res.getID()));
+				}
+			} else if (in.type == InstructionType.STOREADD) {
+				DesName arrName = (DesName)in.args[1];
+				Variable v = variables.get(arrName.getName());
+				List<Integer> dims = v.getDimensions();
+				if(dims.size() == 1) {
+					bb.instructions.remove(i);
+					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.STORE, in.args));
+				} else {
+					int[] partials = new int[dims.size()];
+					int prod = 1;
+					for(int j = dims.size() - 1; j >= 0; j--) {
+						partials[j] = prod;
+						prod*=dims.get(j);
+					}
+					bb.instructions.remove(i);
+					Instruction res = Instruction.makeInstruction(InstructionType.MUL, in.args[2], new Value(partials[0]));
+					bb.instructions.add(i,res);
+					i++;
+					for(int j = 3; j < in.args.length-1; j++) {
+						Instruction next = Instruction.makeInstruction(InstructionType.MUL, in.args[j], new Value(partials[j-2]));
+						bb.instructions.add(i,next);
+						i++;
+						res = Instruction.makeInstruction(InstructionType.ADD, next.getID(), res.getID());
+						bb.instructions.add(i,res);
+						i++;
+					}
+					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.STORE, in.args[0], arrName,res.getID()));
 				}
 			}
 		}
