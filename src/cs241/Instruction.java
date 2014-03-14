@@ -180,6 +180,9 @@ public class Instruction {
 		case FUNCTION:
 			s += "FUNCTION ";
 			break;
+		case RETURN:
+			s+="RETURN ";
+			break;
 		default:
 			s+= "UNRECOGNIZED INSTRUCTION";
 		}

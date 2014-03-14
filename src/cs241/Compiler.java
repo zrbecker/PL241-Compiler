@@ -120,10 +120,10 @@ public class Compiler {
 		
 		
 		//Run common subexpression elimination
-//		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
-//		for(BasicBlock bb : functionBBs.values()) {
-//			runCommonSubexpressionEliminationAndCopyPropagation(bb);
-//		}
+		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
+		for(BasicBlock bb : functionBBs.values()) {
+			runCommonSubexpressionEliminationAndCopyPropagation(bb);
+		}
 		refreshDefUseChain();
 
 		//TODO: setup default value for variables
@@ -178,10 +178,7 @@ public class Compiler {
 				} else {
 					Argument[] args = compileArgsToArray(des.getIndices(), currBB, arg, new DesName(des.getName()));
 					Instruction i = Instruction.makeInstruction(InstructionType.STOREADD, args);
-					addPossibleUse(currBB,i.getID(),arg);
-					for(Argument a : args) {
-						addPossibleUse(currBB,i.getID(),a);
-					}
+					addPossibleUse(currBB,i.getID(),args);
 					currBB.appendInstruction(i);
 				}
 			} else if (curr instanceof FunctionCall) {
@@ -395,7 +392,6 @@ public class Compiler {
 					i = Instruction.makeInstruction(InstructionType.RETURN);
 				}
 				currBB.appendInstruction(i);
-				System.out.println("Error return statements not yet implemented.");
 				return currBB;
 			} else {
 				System.out.println("Error unexpected statement type.");
@@ -514,9 +510,9 @@ public class Compiler {
 		if(args.length == 1) {
 			VariableArg varg = bb.getVariable(var);
 			if(varg == null) {
-				//Unknown variable
-				i = Instruction.makeInstruction(InstructionType.LOAD, args);
-				bb.appendInstruction(i);//TODO: is this a semantic error?
+				//Global variable
+				i = Instruction.makeInstruction(InstructionType.LOAD, args);//TODO: is this the right behavior?
+				bb.appendInstruction(i);
 				return i.getID();
 			} else {
 				//Known variable				
@@ -628,6 +624,19 @@ public class Compiler {
 		if(bb.getNext() != null)
 			createNewDefUseChain(bb.getNext());
 	}
+	
+	private void simpleReplace(InstructionID oldID, Argument newArg) {
+		DefUse du = duchain.getMostRecentDefUse(oldID);
+		while(du != null) {
+			Instruction use = Instruction.getInstructionByID(du.getUseLocation());
+			for(int j = 0; j < use.args.length; j++) {
+				if(use.args[j].equals(oldID)) {
+					use.args[j] = newArg;
+				}
+			}
+			du = du.getPreviousDefUse();
+		}
+	}
 
 	private void removeArrayOps(BasicBlock bb, Map<String,Variable> variables) {
 		for(int i = 0; i < bb.getInstructions().size(); i++) {
@@ -636,9 +645,12 @@ public class Compiler {
 				DesName arrName = (DesName)in.args[0];
 				Variable v = variables.get(arrName.getName());
 				List<Integer> dims = v.getDimensions();
+				InstructionID newID;
 				if(dims.size() == 1) {
 					bb.instructions.remove(i);
-					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.LOAD, in.args));
+					Instruction t = Instruction.makeInstruction(InstructionType.LOAD, in.args);
+					bb.instructions.add(i,t);
+					newID = t.getID();
 				} else {
 					int[] partials = new int[dims.size()];
 					int prod = 1;
@@ -658,15 +670,24 @@ public class Compiler {
 						bb.instructions.add(i,res);
 						i++;
 					}
-					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.LOAD, arrName,res.getID()));
+					res = Instruction.makeInstruction(InstructionType.ADD, res.getID(), in.args[in.args.length-1]);
+					bb.instructions.add(i,res);
+					i++;
+					Instruction t = Instruction.makeInstruction(InstructionType.LOAD, arrName,res.getID());
+					bb.instructions.add(i,t);
+					newID = t.getID();
 				}
+				simpleReplace(in.getID(),newID);
 			} else if (in.type == InstructionType.STOREADD) {
 				DesName arrName = (DesName)in.args[1];
 				Variable v = variables.get(arrName.getName());
 				List<Integer> dims = v.getDimensions();
+				InstructionID newID;
 				if(dims.size() == 1) {
 					bb.instructions.remove(i);
-					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.STORE, in.args));
+					Instruction t = Instruction.makeInstruction(InstructionType.STORE, in.args);
+					bb.instructions.add(i,t);
+					newID = t.getID();
 				} else {
 					int[] partials = new int[dims.size()];
 					int prod = 1;
@@ -686,10 +707,18 @@ public class Compiler {
 						bb.instructions.add(i,res);
 						i++;
 					}
-					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.STORE, in.args[0], arrName,res.getID()));
+					res = Instruction.makeInstruction(InstructionType.ADD, res.getID(), in.args[in.args.length-1]);
+					bb.instructions.add(i,res);
+					i++;
+					Instruction t = Instruction.makeInstruction(InstructionType.STORE, in.args[0], arrName,res.getID());
+					bb.instructions.add(i,t);
+					newID = t.getID();
 				}
+				simpleReplace(in.getID(),newID);
 			}
 		}
+		if(bb.getNext() != null)
+			removeArrayOps(bb.getNext(), variables);
 	}
 	
 	public void runCommonSubexpressionEliminationAndCopyPropagation(BasicBlock bb) {
@@ -715,16 +744,7 @@ public class Compiler {
 					}
 					if(allValues) {
 						Value v = evaluate(ins);
-						DefUse du = duchain.getMostRecentDefUse(ins.getID());
-						while(du != null) {
-							Instruction use = Instruction.getInstructionByID(du.getUseLocation());
-							for(int j = 0; j < use.args.length; j++) {
-								if(use.args[j].equals(ins.getID())) {
-									use.args[j] = v;
-								}
-							}
-							du = du.getPreviousDefUse();
-						}
+						simpleReplace(ins.getID(),v);
 						bb.getInstructions().remove(i);
 						i--;
 						continue;
@@ -749,17 +769,7 @@ public class Compiler {
 				Instruction replace = lookForCopy(ins,l);
 				
 				if(replace != null) {
-					DefUse du = duchain.getMostRecentDefUse(ins.getID());
-					while(du != null) {
-						Instruction use = Instruction.getInstructionByID(du.getUseLocation());
-						for(int j = 0; j < use.args.length; j++) {
-							if(use.args[j].equals(ins.getID())) {
-								use.args[j] = replace.getID();
-							}
-						}
-						du = du.getPreviousDefUse();
-					}
-					
+					simpleReplace(ins.getID(),replace.getID());
 					bb.getInstructions().remove(i);
 					i--;
 					continue;
