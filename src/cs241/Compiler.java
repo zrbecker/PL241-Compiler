@@ -138,7 +138,7 @@ public class Compiler {
 		}
 		
 		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
-		//exporter.exportAsVCG("test.vcg", mainRoot, functionBBs);
+		exporter.exportAsVCG("test.vcg", mainRoot, functionBBs);
 	}
 
 	public Computation getParseTree() throws FileNotFoundException {

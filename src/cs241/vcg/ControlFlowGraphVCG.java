@@ -5,6 +5,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import cs241.BasicBlock;
 import cs241.Instruction;
@@ -49,7 +50,7 @@ public class ControlFlowGraphVCG {
 		}
 	}
 	
-	public void exportAsVCG(String filename, BasicBlock main, List<BasicBlock> functions) {
+	public void exportAsVCG(String filename, BasicBlock main, Map<String, BasicBlock> functionBBs) {
 		try {
 			BufferedWriter out = new BufferedWriter(new FileWriter(new File(filename)));
 			
@@ -59,7 +60,7 @@ public class ControlFlowGraphVCG {
 			out.write("smanhattan_edges: yes\n");
 			
 			writeNodes(out, main);
-			for (BasicBlock function : functions)
+			for (BasicBlock function : functionBBs.values())
 				writeNodes(out, function);
 			
 			out.write("}\n");
