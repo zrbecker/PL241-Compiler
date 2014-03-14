@@ -60,8 +60,8 @@ public abstract class Statement {
 		
 		public If(Relation condition, ArrayList<Statement> thenBlock, ArrayList<Statement> elseBlock) {
 			this.condition = condition;
-			this.thenBlock = thenBlock;
-			this.elseBlock = elseBlock;
+			this.thenBlock = (thenBlock == null) ? new ArrayList<Statement>() : thenBlock;
+			this.elseBlock = (elseBlock == null) ? new ArrayList<Statement>() : elseBlock;
 		}
 		
 		public Relation getCondition() {
@@ -83,7 +83,7 @@ public abstract class Statement {
 		
 		public While(Relation condition, ArrayList<Statement> block) {
 			this.condition = condition;
-			this.block = block;
+			this.block = (block == null) ? new ArrayList<Statement>() : block;
 		}
 		
 		public Relation getCondition() {

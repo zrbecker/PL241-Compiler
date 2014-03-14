@@ -9,9 +9,9 @@ public class Computation {
 	ArrayList<Statement> body;
 	
 	public Computation(ArrayList<Variable> variables, ArrayList<Function> functions, ArrayList<Statement> body) {
-		this.variables = variables;
-		this.functions = functions;
-		this.body = body;
+		this.variables = (variables == null) ? new ArrayList<Variable>() : variables;
+		this.functions = (functions == null) ? new ArrayList<Function>() : functions;
+		this.body = (body == null) ? new ArrayList<Statement>() : body;
 	}
 	
 	public ArrayList<Variable> getVariables() {
@@ -25,5 +25,5 @@ public class Computation {
 	public ArrayList<Statement> getBody() {
 		return body;
 	}
-	
+
 }

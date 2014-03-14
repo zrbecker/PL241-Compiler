@@ -17,9 +17,9 @@ public class Function {
 	public Function(Type type, String name, ArrayList<String> parameters, ArrayList<Variable> variables, ArrayList<Statement> body) {
 		this.type = type;
 		this.name = name;
-		this.parameters = parameters;
-		this.variables = variables;
-		this.body = body;
+		this.parameters = (parameters == null) ? new ArrayList<String>() : parameters;
+		this.variables = (variables == null) ? new ArrayList<Variable>() : variables;
+		this.body = (body == null) ? new ArrayList<Statement>() : body;
 	}
 	
 	public Type getType() {
