@@ -50,7 +50,6 @@ public class Compiler {
 	DefUseChain duchain;
 	Map<String,Function> functions;
 	Map<String,BasicBlock> functionBBs;
-	Set<String> globalVariables;
 	Computation c;
 
 	private Set<InstructionType> expressionInstructions;
@@ -63,7 +62,6 @@ public class Compiler {
 		duchain = new DefUseChain();
 		functions = new HashMap<String,Function>();
 		functionBBs = new HashMap<String,BasicBlock>();
-		globalVariables = new HashSet<String>();
 		expressionInstructions  = new HashSet<InstructionType>();
 		expressionInstructions.add(InstructionType.ADD);
 		expressionInstructions.add(InstructionType.DIV);
@@ -166,13 +164,24 @@ public class Compiler {
 				String var = des.getName();
 				
 				if(des.getIndices() == null || des.getIndices().size() == 0) {
-					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,arg, new DesName(var));
-					currBB.appendInstruction(i);
-					addPossibleUse(currBB,i.getID(),arg);
-					currBB.updateVariable(var, arg, i.getID());
+					if(des.isGlobal()) {
+						Instruction i = Instruction.makeInstruction(InstructionType.STORE, new DesName(var), arg);
+						addPossibleUse(currBB,i.getID(),arg);
+						currBB.appendInstruction(i);
+					} else {
+						Instruction i = Instruction.makeInstruction(InstructionType.MOVE,arg, new DesName(var));
+						currBB.appendInstruction(i);
+						addPossibleUse(currBB,i.getID(),arg);
+						currBB.updateVariable(var, arg, i.getID());
+					}
 				} else {
 					Argument[] args = compileArgsToArray(des.getIndices(), currBB, arg, new DesName(des.getName()));
-					currBB.appendInstruction(Instruction.makeInstruction(InstructionType.STOREADD, args));
+					Instruction i = Instruction.makeInstruction(InstructionType.STOREADD, args);
+					addPossibleUse(currBB,i.getID(),arg);
+					for(Argument a : args) {
+						addPossibleUse(currBB,i.getID(),a);
+					}
+					currBB.appendInstruction(i);
 				}
 			} else if (curr instanceof FunctionCall) {
 				FunctionCall currFC = (FunctionCall) curr;
