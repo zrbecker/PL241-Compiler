@@ -128,6 +128,7 @@ public class Compiler {
 		}
 		refreshDefUseChain();
 
+		//TODO: setup default value for variables
 		//TODO: eliminate phis
 		//TODO: register allocation!!!
 		
@@ -137,7 +138,7 @@ public class Compiler {
 		}
 		
 		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
-		exporter.exportAsVCG("test.vcg", mainRoot);
+		exporter.exportAsVCG("test.vcg", mainRoot, functionBBs);
 	}
 
 	public Computation getParseTree() throws FileNotFoundException {
