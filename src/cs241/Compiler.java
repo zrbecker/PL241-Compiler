@@ -135,8 +135,9 @@ public class Compiler {
 			System.out.println(fbb);
 		}
 		
+		String vcgName = inputFile.getName() + ".vcg";
 		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
-		exporter.exportAsVCG("test.vcg", mainRoot, functionBBs);
+		exporter.exportAsVCG(vcgName, mainRoot, functionBBs);
 	}
 
 	public Computation getParseTree() throws FileNotFoundException {

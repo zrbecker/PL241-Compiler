@@ -15,7 +15,7 @@ public class Variable {
 	public Variable(String name) {
 		type = Type.VARIABLE;
 		this.name = name;
-		this.dimensions = null;
+		this.dimensions = new ArrayList<Integer>();
 	}
 	
 	public Variable(String name, ArrayList<Integer> dimensions) {

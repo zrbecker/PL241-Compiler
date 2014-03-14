@@ -57,13 +57,13 @@ public abstract class Expression {
 		boolean isGlobal;
 		
 		public Designator(String name, boolean isGlobal) {
-			this(name, isGlobal, null);
+			this(name, isGlobal, new ArrayList<Expression>());
 		}
 		
 		public Designator(String name, boolean isGlobal, ArrayList<Expression> indices) {
 			this.name = name;
 			this.isGlobal = isGlobal;
-			this.indices = indices;
+			this.indices = (indices == null) ? new ArrayList<Expression>() : indices;
 		}
 		
 		public String getName() {
