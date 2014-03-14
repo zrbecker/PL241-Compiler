@@ -6,6 +6,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import cs241.BasicBlock;
 import cs241.Instruction;
@@ -16,9 +17,9 @@ public class ControlFlowGraphVCG {
 		
 	}
 	
-	public void writeNodes(BufferedWriter out, BasicBlock current) throws IOException {
+	public void writeNodes(BufferedWriter out, String unitName, BasicBlock current) throws IOException {
 		while (current != null) {
-			String name = "" + current.getID();
+			String name = unitName + " " + current.getID().getID();
 
 			StringBuilder sb = new StringBuilder();
 			sb.append(name + ": \n");
@@ -38,7 +39,7 @@ public class ControlFlowGraphVCG {
 			
 			if (current.getChildren() != null) {
 				for (BasicBlock child : current.getChildren()) {
-					String destName = "" + child.getID();
+					String destName = unitName + " " + child.getID().getID();
 					out.write("edge {\n");
 					out.write("sourcename: \"" + name + "\"\n");
 					out.write("targetname: \"" + destName + "\"\n");
@@ -59,9 +60,12 @@ public class ControlFlowGraphVCG {
 			out.write("manhattan_edges: yes\n");
 			out.write("smanhattan_edges: yes\n");
 			
-			writeNodes(out, main);
-			for (BasicBlock function : functionBBs.values())
-				writeNodes(out, function);
+			writeNodes(out, "main", main);
+			for (Entry<String, BasicBlock> keyvalue : functionBBs.entrySet()) {
+				String functionName = keyvalue.getKey();
+				BasicBlock basicblock = keyvalue.getValue();
+				writeNodes(out, functionName, basicblock);
+			}
 			
 			out.write("}\n");
 			
