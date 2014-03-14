@@ -118,6 +118,7 @@ public class Compiler {
 		}
 		refreshDefUseChain();
 
+		//TODO: setup default value for variables
 		//TODO: eliminate phis
 		//TODO: register allocation!!!
 		
