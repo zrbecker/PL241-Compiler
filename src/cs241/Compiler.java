@@ -39,6 +39,7 @@ import cs241.parser.treenodes.Statement.FunctionCall;
 import cs241.parser.treenodes.Statement.If;
 import cs241.parser.treenodes.Statement.Return;
 import cs241.parser.treenodes.Statement.While;
+import cs241.parser.treenodes.Variable;
 import cs241.vcg.ControlFlowGraphVCG;
 
 public class Compiler {
@@ -48,8 +49,9 @@ public class Compiler {
 	BasicBlock mainRoot;
 	DefUseChain duchain;
 	Map<String,Function> functions;
-	List<BasicBlock> functionBBs;
+	Map<String,BasicBlock> functionBBs;
 	Set<String> globalVariables;
+	Computation c;
 
 	private Set<InstructionType> expressionInstructions;
 	
@@ -60,7 +62,7 @@ public class Compiler {
 		mainRoot = new BasicBlock();
 		duchain = new DefUseChain();
 		functions = new HashMap<String,Function>();
-		functionBBs = new ArrayList<BasicBlock>();
+		functionBBs = new HashMap<String,BasicBlock>();
 		globalVariables = new HashSet<String>();
 		expressionInstructions  = new HashSet<InstructionType>();
 		expressionInstructions.add(InstructionType.ADD);
@@ -72,7 +74,7 @@ public class Compiler {
 	}
 
 	public void compile() throws FileNotFoundException {
-		Computation c = getParseTree();
+		c = getParseTree();
 		if(c == null) {
 			System.out.println("Parsing error. Terminating.");
 			return;
@@ -87,7 +89,7 @@ public class Compiler {
 				List<Statement> funcBody = func.getBody();
 				BasicBlock funcHead = new BasicBlock();
 				compileIntoBBs(funcBody, funcHead);
-				functionBBs.add(funcHead);
+				functionBBs.put(func.getName(),funcHead);
 			}
 		}
 		
@@ -98,22 +100,30 @@ public class Compiler {
 		
 		//Simplify arguments and create new DefUse chain
 		mainRoot.simplify();
-		for(BasicBlock bb : functionBBs) {
+		for(BasicBlock bb : functionBBs.values()) {
 			bb.simplify();
 		}
 		refreshDefUseChain();
 		
 		//Replace STOREADD and LOADADD with ADD, MUL, STORE, and LOAD
-		removeArrayOps(mainRoot);
-		for(BasicBlock bb : functionBBs) {
-			removeArrayOps(bb);
+		Map<String,Variable> varMap = new HashMap<String,Variable>();
+		for(Variable v : c.getVariables()) {
+			varMap.put(v.getName(), v);
+		}
+		removeArrayOps(mainRoot,varMap);
+		for(String func : functionBBs.keySet()) {
+			varMap = new HashMap<String,Variable>();
+			for(Variable v : functions.get(func).getVariables()) {
+				varMap.put(v.getName(), v);
+			}
+			removeArrayOps(functionBBs.get(func),varMap);
 		}
 		refreshDefUseChain();
 		
 		
 		//Run common subexpression elimination
 		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
-		for(BasicBlock bb : functionBBs) {
+		for(BasicBlock bb : functionBBs.values()) {
 			runCommonSubexpressionEliminationAndCopyPropagation(bb);
 		}
 		refreshDefUseChain();
@@ -122,7 +132,7 @@ public class Compiler {
 		//TODO: register allocation!!!
 		
 		System.out.println(mainRoot);
-		for(BasicBlock fbb : functionBBs) {
+		for(BasicBlock fbb : functionBBs.values()) {
 			System.out.println(fbb);
 		}
 		
@@ -592,7 +602,7 @@ public class Compiler {
 	private void refreshDefUseChain() {
 		duchain = new DefUseChain();
 		createNewDefUseChain(mainRoot);
-		for(BasicBlock bb : functionBBs) {
+		for(BasicBlock bb : functionBBs.values()) {
 			createNewDefUseChain(bb);
 		}
 	}
@@ -608,10 +618,29 @@ public class Compiler {
 			createNewDefUseChain(bb.getNext());
 	}
 
-	private void removeArrayOps(BasicBlock bb) {
+	private void removeArrayOps(BasicBlock bb, Map<String,Variable> variables) {
 		for(int i = 0; i < bb.getInstructions().size(); i++) {
-			if(bb.instructions.get(i).type == InstructionType.LOADADD || bb.instructions.get(i).type == InstructionType.STOREADD) {
-				
+			Instruction in = bb.instructions.get(i);
+			if(in.type == InstructionType.LOADADD || in.type == InstructionType.STOREADD) {
+				DesName arrName = (DesName)in.args[0];
+				Variable v = variables.get(arrName.getName());
+				List<Integer> dims = v.getDimensions();
+				if(dims.size() == 1) {
+					bb.instructions.remove(i);
+					bb.instructions.add(i,Instruction.makeInstruction(InstructionType.LOAD, in.args));
+				} else {
+					
+					List<Integer> partials = new ArrayList<Integer>();
+					int prod = 1;
+					for(int j = dims.size() - 1; j >= 0; j--) {
+						partials.add(prod,j);
+						prod*=dims.get(j);
+					}
+					Instruction prev = Instruction.makeInstruction(InstructionType.MUL, in.args[1], new Value(partials.get(0)));
+					for(int j = 1; j < in.args.length-1; j++) {
+						
+					}
+				}
 			}
 		}
 	}
