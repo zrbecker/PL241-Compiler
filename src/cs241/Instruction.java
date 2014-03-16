@@ -7,7 +7,6 @@ import cs241.Argument.InstructionID;
 
 public class Instruction {
 	public enum InstructionType {
-		NEG,
 		ADD,
 		SUB,
 		MUL,
@@ -26,9 +25,6 @@ public class Instruction {
 		BLT,
 		BGE,
 		BGT,
-		READ,
-		WRITE,
-		WLN,
 		RETURN,
 		LOADADD, //For arrays only
 		STOREADD, //For arrays only
@@ -60,15 +56,11 @@ public class Instruction {
 			case FUNCTION:
 				assert(args.length >= 1);
 				break;
-			case NEG:
 			case LOAD:
 			case BRA:
 				assert(args.length == 1);
 				break;
 			case END:
-			case READ:
-			case WRITE:
-			case WLN:
 				assert(args.length == 0);
 				break;
 			case RETURN:
@@ -105,9 +97,6 @@ public class Instruction {
 	public String toString() {
 		String s = "\t" + instructionID +": ";
 		switch(type) {
-		case NEG:
-			s += "NEG ";
-			break;
 		case ADD:
 			s += "ADD ";
 			break;
@@ -161,15 +150,6 @@ public class Instruction {
 			break;
 		case BGT:
 			s += "BGT";
-			break;
-		case READ:
-			s += "READ ";
-			break;
-		case WRITE:
-			s += "WRITE ";
-			break;
-		case WLN:
-			s += "WLN ";
 			break;
 		case LOADADD:
 			s += "LOADADD ";

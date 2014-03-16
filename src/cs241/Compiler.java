@@ -66,7 +66,6 @@ public class Compiler {
 		expressionInstructions.add(InstructionType.ADD);
 		expressionInstructions.add(InstructionType.DIV);
 		expressionInstructions.add(InstructionType.MUL);
-		expressionInstructions.add(InstructionType.NEG);
 		expressionInstructions.add(InstructionType.PHI);
 		expressionInstructions.add(InstructionType.SUB);
 	}
@@ -95,6 +94,7 @@ public class Compiler {
 		List<Statement> mainCode = c.getBody();
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
+		lastBlock.setIsReturnBlock();
 		
 		//Simplify arguments and create new DefUse chain
 		mainRoot.simplify();
@@ -815,8 +815,6 @@ public class Compiler {
 				return new Value(((Value)ins.args[0]).getValue() / ((Value)ins.args[1]).getValue());
 			case MUL:
 				return new Value(((Value)ins.args[0]).getValue() * ((Value)ins.args[1]).getValue());
-			case NEG:
-				return new Value(-1*((Value)ins.args[0]).getValue());
 			case SUB:
 				return new Value(((Value)ins.args[0]).getValue() - ((Value)ins.args[1]).getValue());
 			default:
