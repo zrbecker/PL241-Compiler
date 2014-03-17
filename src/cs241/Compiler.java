@@ -163,6 +163,11 @@ public class Compiler {
 		}
 		
 		
+		String vcgName = inputFile.getName() + ".vcg";
+		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
+		exporter.exportAsVCG(vcgName, mainRoot, functionBBs);
+		
+		
 		//Create maps for compiling to real instructions
 		Map<InstructionID,Integer> instructionToRegister = new HashMap<InstructionID,Integer>();
 		Map<InstructionID,Integer> spilledInstructionToOffset = new HashMap<InstructionID,Integer>();
@@ -210,11 +215,6 @@ public class Compiler {
 		byte[] bytes = new byte[realInstructions.size()];
 		for(int i = 0; i < realInstructions.size(); i++)
 			bytes[i] = realInstructions.get(i).toByte();
-		
-		
-		String vcgName = inputFile.getName() + ".vcg";
-		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
-		exporter.exportAsVCG(vcgName, mainRoot, functionBBs);
 		
 		return bytes;
 	}
