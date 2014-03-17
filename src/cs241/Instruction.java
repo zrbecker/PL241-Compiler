@@ -149,7 +149,7 @@ public class Instruction {
 			s += "BGE ";
 			break;
 		case BGT:
-			s += "BGT";
+			s += "BGT ";
 			break;
 		case LOADADD:
 			s += "LOADADD ";

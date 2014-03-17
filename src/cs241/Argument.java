@@ -13,8 +13,10 @@ public abstract class Argument {
 		return false;
 	}
 	
-	public boolean equals(Argument a) {
-		return this.getClass().equals(a.getClass());
+	public abstract int hashCode();
+	
+	public boolean equals(Object o) {
+		return this.getClass().equals(o.getClass());
 	}
 	
 	public abstract Argument clone();
@@ -97,26 +99,31 @@ public abstract class Argument {
 	
 	public static class FunctionArg extends Argument {
 		private String name;
-		public FunctionArg(String n) {
+		private String function;
+		public FunctionArg(String f, String n) {
+			function = f;
 			name = n;
 		}
 		public String getName() {
 			return name;
 		}
-		public int hashCode() {
-			return name.hashCode();
+		public String getFunction() {
+			return function;
 		}
-		public boolean equals(Argument arg) {
+		public int hashCode() {
+			return 1;//name.hashCode() + function.hashCode();
+		}
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((FunctionArg)arg);
 		}
 		public boolean equals(FunctionArg farg) {
-			return name.equals(farg.getName());
+			return name.equals(farg.getName()) && function.equals(farg.getFunction());
 		}
 		public String toString() {
-			return "FunctionArg." + name;
+			return "FunctionArg." + function + "." + name;
 		}
 		public Argument clone() {
-			return new FunctionArg(name);
+			return new FunctionArg(function,name);
 		}
 	}
 	
@@ -187,6 +194,10 @@ public abstract class Argument {
 		public InstructionID getDef() {
 			return def;
 		}
+		public int hashCode() {
+			return var.hashCode() + 3*val.hashCode() + 5*def.hashCode();
+		}
+		
 		public boolean isVariable() {
 			return true;
 		}

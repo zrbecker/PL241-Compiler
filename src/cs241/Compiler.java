@@ -94,7 +94,7 @@ public class Compiler {
 				BasicBlock funcHead = new BasicBlock();
 				
 				for(String param : currentFunctionParams) {
-					FunctionArg paramFArg = new FunctionArg(param);
+					FunctionArg paramFArg = new FunctionArg(func.getName(),param);
 					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,paramFArg, new DesName(param));
 					//Do not append, because this move is a place holder for defuse purposes
 					//currBB.appendInstruction(i);
@@ -149,9 +149,10 @@ public class Compiler {
 
 		//TODO: setup default value for variables
 		RegisterAllocator allocator = new RegisterAllocator();
-		Map<InstructionID,Integer> registerAllocation = allocator.allocate(mainRoot);
+		Map<InstructionID,Integer> mainAllocation = allocator.allocate(mainRoot);
+		Map<String,Map<InstructionID,Integer>> functionToAllocation = new HashMap<String,Map<InstructionID,Integer>>();
 		for(String funcName : functions.keySet()) {
-			registerAllocation.putAll(allocator.allocate(functionBBs.get(funcName)));
+			functionToAllocation.put(funcName, allocator.allocate(functionBBs.get(funcName)));
 		}
 		
 		
@@ -171,41 +172,81 @@ public class Compiler {
 		
 		//Create maps for compiling to real instructions
 		Map<InstructionID,Integer> instructionToRegister = new HashMap<InstructionID,Integer>();
-		Map<InstructionID,Integer> spilledInstructionToOffset = new HashMap<InstructionID,Integer>();
-		int currentSpillLocation = 0;
-		for(InstructionID id : registerAllocation.keySet()) {
-			Integer reg = registerAllocation.get(id);
+		Set<Argument> onHeap = new HashSet<Argument>();
+		Map<Argument,Integer> heapVariableToOffset = new HashMap<Argument,Integer>();
+		int currentHeapOffset = 0;
+		//Handle arrays in main on heap
+		for(Variable var : c.getVariables()) {
+			if(var.getDimensions().size() > 0)
+				continue;
+			int dim = 1;
+			for(Integer d : var.getDimensions()) {
+				dim*=d;
+			}
+			onHeap.add(new DesName(var.getName()));
+			currentHeapOffset-=4*dim;
+			heapVariableToOffset.put(new DesName(var.getName()),currentHeapOffset);
+		}
+		
+		for(InstructionID id : mainAllocation.keySet()) {
+			Integer reg = mainAllocation.get(id);
 			if(reg <= 24) {
 				instructionToRegister.put(id, reg + 3);
 			} else {
-				spilledInstructionToOffset.put(id, currentSpillLocation);
-				currentSpillLocation-=4;
+				//Handle spilled registers in main on heap
+				onHeap.add(id);
+				currentHeapOffset-=4;
+				heapVariableToOffset.put(id, currentHeapOffset);
 			}
 		}
-		
-		
-		Map<DesName,Integer> heapVariableToOffset = new HashMap<DesName,Integer>();//TODO: create the map
-		List<Variable> vars = c.getVariables();
-		for(Variable v : vars) {
-		}
+
+		Map<Argument,Integer> stackVariableToOffset = new HashMap<Argument,Integer>();
+		Map<BasicBlockID,Integer> basicBlockIDToSizeOfVariables = new HashMap<BasicBlockID,Integer>();
 		for(Function func : c.getFunctions()) {
-			
-		}
-		Map<FunctionArg,Integer> stackVariableToOffset = new HashMap<FunctionArg,Integer>();
-		for(Function func : c.getFunctions()) {
-			int pos = 4;
+			//Handle function params on the stack
+			int currentStackOffset = 0;
 			for(String param : func.getParameters()) {
-				stackVariableToOffset.put(new FunctionArg(param),pos);
-				pos+=4;
+				FunctionArg farg = new FunctionArg(func.getName(), param);
+				stackVariableToOffset.put(farg, currentStackOffset);
+				currentStackOffset+=4;
 			}
+			int paramSize = currentStackOffset;
+			//Handle function arrays on stack
+			for(Variable var : func.getVariables()) {
+				if(var.getDimensions().size() > 0)
+					continue;
+				int dim = 1;
+				for(Integer d : var.getDimensions()) {
+					dim*=d;
+				}
+				stackVariableToOffset.put(new DesName(var.getName()),currentStackOffset);
+				currentStackOffset+=4*dim;
+			}
+			
+			Map<InstructionID,Integer> funcAllocation = functionToAllocation.get(func.getName());
+			for(InstructionID id : funcAllocation.keySet()) {
+				Integer reg = funcAllocation.get(id);
+				if(reg <= 24) {
+					instructionToRegister.put(id, reg + 3);
+				} else {
+					//Handle spilled registers in a function on the stack
+					stackVariableToOffset.put(id, currentStackOffset);
+					currentStackOffset+=4;
+				}
+			}
+			int totalSize = currentStackOffset;
+			int variableSize = totalSize - paramSize;
+			BasicBlockID bbID = functionBBs.get(func.getName()).getID();
+			basicBlockIDToSizeOfVariables.put(bbID, variableSize);
 		}
+		
 		Map<String,BasicBlockID> functionToBBIDs = new HashMap<String,BasicBlockID>();
 		for(String func : functionBBs.keySet()) {
 			functionToBBIDs.put(func, functionBBs.get(func).getID());
 		}
 		
 		//Create real instructions
-		RealInstructionListFactory realInstructionMaker = new RealInstructionListFactory(instructionToRegister,heapVariableToOffset,stackVariableToOffset,spilledInstructionToOffset,functionToBBIDs);
+		RealInstructionListFactory realInstructionMaker = new RealInstructionListFactory(instructionToRegister,heapVariableToOffset,stackVariableToOffset,onHeap,basicBlockIDToSizeOfVariables,functionToBBIDs);
 		realInstructionMaker.makeRealInstructions(mainRoot);
 		for(BasicBlock fbb : functionBBs.values()) {
 			realInstructionMaker.makeRealInstructions(fbb);
