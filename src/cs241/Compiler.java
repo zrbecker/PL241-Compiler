@@ -145,6 +145,8 @@ public class Compiler {
 		//TODO: setup default value for variables
 		//TODO: eliminate phis
 		//TODO: register allocation!!!
+		RegisterAllocator allocator = new RegisterAllocator();
+		allocator.allocate(mainRoot);
 		
 		System.out.println(mainRoot);
 		for(BasicBlock fbb : functionBBs.values()) {
