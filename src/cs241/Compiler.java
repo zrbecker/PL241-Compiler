@@ -59,6 +59,7 @@ public class Compiler {
 
 	private Set<InstructionType> expressionInstructions;
 	private Set<String> currentFunctionParams;
+	private Set<String> globalVariables;
 	
 	public Compiler(File in, File out) {
 		inputFile = in;
@@ -218,11 +219,19 @@ public class Compiler {
 		
 		return bytes;
 	}
+	
+	public Map<Argument, Integer> getHeapOffsets() {
+		// Setup heap offsets for each global variable
+		// Setup heap offsets for each array in main
+		// Setup heap offsets for each virtual register in main
+		return null;
+	}
 
 	public Computation getParseTree() throws FileNotFoundException {
 		Reader reader = new FileReader(inputFile);
 		try {
 			Computation c = parser.parse(reader);
+			globalVariables = parser.getGlobals();
 			return c;
 		} catch (ParserException e) {
 			e.printStackTrace();

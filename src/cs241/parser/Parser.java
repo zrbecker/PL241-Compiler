@@ -32,6 +32,10 @@ public class Parser {
 		nextToken();
 		return parseComputation();
 	}
+	
+	public HashSet<String> getGlobals() {
+		return globals;
+	}
 
 	private void nextToken() {
 		token = scanner.next();
