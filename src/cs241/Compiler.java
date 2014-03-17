@@ -3,7 +3,11 @@ package cs241;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
+import java.io.IOException;
 import java.io.Reader;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -72,11 +76,11 @@ public class Compiler {
 		expressionInstructions.add(InstructionType.SUB);
 	}
 
-	public void compile() throws FileNotFoundException {
+	public byte[] compile() throws IOException {
 		c = getParseTree();
 		if(c == null) {
 			System.out.println("Parsing error. Terminating.");
-			return;
+			return null;
 		}
 		
 		//Compile the functions present in the code
@@ -143,19 +147,60 @@ public class Compiler {
 		refreshDefUseChain();
 
 		//TODO: setup default value for variables
-		//TODO: eliminate phis
-		//TODO: register allocation!!!
 		RegisterAllocator allocator = new RegisterAllocator();
-		allocator.allocate(mainRoot);
+		Map<Instruction,Integer> mainAllocation = allocator.allocate(mainRoot);
+		//TODO: eliminate phis
+		//TODO: allocate function bbs
 		
 		System.out.println(mainRoot);
 		for(BasicBlock fbb : functionBBs.values()) {
 			System.out.println(fbb);
 		}
 		
+		
+		//Create maps for compiling to real instructions
+		Map<InstructionID,Integer> instructionToRegister = new HashMap<InstructionID,Integer>();//TODO: create the map
+		Map<InstructionID,Integer> spilledInstructionToOffset = new HashMap<InstructionID,Integer>();//TODO: create the map
+		
+		Map<DesName,Integer> heapVariableToOffset = new HashMap<DesName,Integer>();//TODO: create the map
+		List<Variable> vars = c.getVariables();
+		for(Variable v : vars) {
+		}
+		for(Function func : c.getFunctions()) {
+			
+		}
+		Map<FunctionArg,Integer> stackVariableToOffset = new HashMap<FunctionArg,Integer>();
+		for(Function func : c.getFunctions()) {
+			int pos = +4;
+			for(String param : func.getParameters()) {
+				stackVariableToOffset.put(new FunctionArg(param),pos);
+				pos+=4;
+			}
+		}
+		Map<String,BasicBlockID> functionToBBIDs = new HashMap<String,BasicBlockID>();
+		for(String func : functionBBs.keySet()) {
+			functionToBBIDs.put(func, functionBBs.get(func).getID());
+		}
+		
+		//Create real instructions
+		RealInstructionListFactory realInstructionMaker = new RealInstructionListFactory(instructionToRegister,heapVariableToOffset,stackVariableToOffset,spilledInstructionToOffset,functionToBBIDs);
+		realInstructionMaker.makeRealInstructions(mainRoot);
+		for(BasicBlock fbb : functionBBs.values()) {
+			realInstructionMaker.makeRealInstructions(fbb);
+		}
+		List<RealInstruction> realInstructions = realInstructionMaker.getRealInstructionList();
+		
+		//Switch to a byte array
+		byte[] bytes = new byte[realInstructions.size()];
+		for(int i = 0; i < realInstructions.size(); i++)
+			bytes[i] = realInstructions.get(i).toByte();
+		
+		
 		String vcgName = inputFile.getName() + ".vcg";
 		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
 		exporter.exportAsVCG(vcgName, mainRoot, functionBBs);
+		
+		return bytes;
 	}
 
 	public Computation getParseTree() throws FileNotFoundException {
