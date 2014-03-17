@@ -87,7 +87,7 @@ public class RegisterAllocator {
 		calcLiveRange(b, 0, 1);
 		calcLiveRange(b, 0, 2);
 		colorGraph();
-		// saveVCGGraph("interference.vcg"); // For debugging
+		saveVCGGraph("interference.vcg"); // For debugging
 		
 		return colors;
 	}
@@ -168,10 +168,7 @@ public class RegisterAllocator {
 					if (b.isWhileConditionBlock() && index == 0)
 						loopHeaders.add(b);
 					
-					if (b.isWhileConditionBlock())
-						live.addAll(calcLiveRange(child, index, pass));
-					else
-						live.addAll(calcLiveRange(child, 1 - index, pass));
+					live.addAll(calcLiveRange(child, index, pass));
 					index += 1;
 					
 					if (b.isWhileConditionBlock() && index == 0)
@@ -210,9 +207,14 @@ public class RegisterAllocator {
 					for (Instruction other : live)
 						interferenceGraph.addEdge(ins, other);
 					
-					Argument arg = ins.args[branch];
-					if (arg instanceof InstructionID)
-						live.add(Instruction.getInstructionByID((InstructionID) arg));
+					for (Argument arg : ins.args) {
+						if (arg instanceof InstructionID)
+							live.add(Instruction.getInstructionByID((InstructionID) arg));
+					}
+					
+//					Argument arg = ins.args[branch];
+//					if (arg instanceof InstructionID)
+//						live.add(Instruction.getInstructionByID((InstructionID) arg));
 				}
 			}
 		}
