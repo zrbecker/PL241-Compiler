@@ -103,10 +103,12 @@ public class RealInstructionListFactory {
 	Argument currentR2; //Stores the current argument in the second register
 	
 	List<RealInstruction> instructions;
-	public RealInstructionListFactory(Map<InstructionID,Integer> insToReg, Map<Argument,Integer> heapVarToOff, Map<Argument,Integer> stackVarToOff, Map<String,BasicBlockID> funToBBID) {
+	public RealInstructionListFactory(Map<InstructionID,Integer> insToReg, Map<Argument,Integer> heapVarToOff, Map<Argument,Integer> stackVarToOff, Set<Argument> varsOnHeap, Map<BasicBlockID,Integer> bbIDsToVarSize, Map<String,BasicBlockID> funToBBID) {
 		instructionToRegister = insToReg;
 		heapVariableToOffset = heapVarToOff;
 		stackVariableToOffset = stackVarToOff;
+		onHeap = varsOnHeap;
+		basicBlockIDToSizeOfVariables = bbIDsToVarSize;
 		functionToBasicBlockID = funToBBID;
 		instructions = new ArrayList<RealInstruction>();
 		bbIDToLoc = new HashMap<BasicBlockID,Integer>();
