@@ -148,11 +148,12 @@ public class Compiler {
 
 		//TODO: setup default value for variables
 		RegisterAllocator allocator = new RegisterAllocator();
-		Map<InstructionID,Integer> mainAllocation = allocator.allocate(mainRoot);
-		Map<String,Map<InstructionID,Integer>> functionAllocations = new HashMap<String,Map<InstructionID,Integer>>();
+		Map<InstructionID,Integer> registerAllocation = allocator.allocate(mainRoot);
 		for(String funcName : functions.keySet()) {
-			functionAllocations.put(funcName, allocator.allocate(functionBBs.get(funcName)));
+			registerAllocation.putAll(allocator.allocate(functionBBs.get(funcName)));
 		}
+		
+		
 		//TODO: eliminate phis
 		//TODO: allocate function bbs
 		
@@ -163,8 +164,19 @@ public class Compiler {
 		
 		
 		//Create maps for compiling to real instructions
-		Map<InstructionID,Integer> instructionToRegister = new HashMap<InstructionID,Integer>();//TODO: create the map
-		Map<InstructionID,Integer> spilledInstructionToOffset = new HashMap<InstructionID,Integer>();//TODO: create the map
+		Map<InstructionID,Integer> instructionToRegister = new HashMap<InstructionID,Integer>();
+		Map<InstructionID,Integer> spilledInstructionToOffset = new HashMap<InstructionID,Integer>();
+		int currentSpillLocation = 0;
+		for(InstructionID id : registerAllocation.keySet()) {
+			Integer reg = registerAllocation.get(id);
+			if(reg <= 24) {
+				instructionToRegister.put(id, reg + 3);
+			} else {
+				spilledInstructionToOffset.put(id, currentSpillLocation);
+				currentSpillLocation-=4;
+			}
+		}
+		
 		
 		Map<DesName,Integer> heapVariableToOffset = new HashMap<DesName,Integer>();//TODO: create the map
 		List<Variable> vars = c.getVariables();
@@ -275,6 +287,8 @@ public class Compiler {
 				currBB.addChild(ifThen);
 				if(!thenOnly)
 					currBB.addChild(ifElse);
+				else
+					currBB.addChild(afterIf);
 				ifThen.addChild(afterIf);
 				if(!thenOnly)
 					ifElse.addChild(afterIf);
@@ -283,6 +297,8 @@ public class Compiler {
 				ifThen.addParent(currBB);
 				if(!thenOnly)
 					ifElse.addParent(currBB);
+				else
+					afterIf.addParent(currBB);
 				afterIf.addParent(ifThen);
 				if(!thenOnly)
 					afterIf.addParent(ifElse);
@@ -325,6 +341,7 @@ public class Compiler {
 				
 				//Compile the branches
 				BasicBlock lastIfThenBlock = compileIntoBBs(currIf.getThenBlock(), ifThen);
+				lastIfThenBlock.setLastThenBlock();
 				BasicBlock lastIfElseBlock = ifElse;
 				if(!thenOnly) {
 					//Add the branch from the ifthen to after the ifelse

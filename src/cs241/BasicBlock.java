@@ -33,6 +33,7 @@ public class BasicBlock {
 	
 	private boolean returnBlock;
 	private boolean whileConditionBlock;
+	private boolean lastThenBlock;
 	
 	private Map<String,VariableArg> varLookupTable;
 	private Set<String> changedVariables;
@@ -139,6 +140,14 @@ public class BasicBlock {
 
 	public void setWhileConditionBlock() {
 		whileConditionBlock = true;
+	}
+	
+	public boolean isLastThenBlock() {
+		return lastThenBlock;
+	}
+	
+	public void setLastThenBlock() {
+		lastThenBlock = true;
 	}
 	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
