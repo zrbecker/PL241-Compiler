@@ -193,8 +193,6 @@ public class BasicBlock {
 	public void simplify() {
 		List<Instruction> newIns = new LinkedList<Instruction>();
 		for(Instruction i : instructions) {
-			if(i.type == InstructionType.MOVE)
-				continue;
 			for(int j = 0; j < i.args.length; j++) {
 				if(i.args[j] instanceof VariableArg) {
 					i.args[j] = ((VariableArg)i.args[j]).getValue();

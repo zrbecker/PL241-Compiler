@@ -15,6 +15,7 @@ import java.util.Set;
 import cs241.Argument.BasicBlockID;
 import cs241.Argument.CopiedVariable;
 import cs241.Argument.DesName;
+import cs241.Argument.FunctionArg;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
@@ -53,6 +54,7 @@ public class Compiler {
 	Computation c;
 
 	private Set<InstructionType> expressionInstructions;
+	private Set<String> currentFunctionParams;
 	
 	public Compiler(File in, File out) {
 		inputFile = in;
@@ -77,20 +79,34 @@ public class Compiler {
 			return;
 		}
 		
-		//TODO: worry about variable and function param/variable parts
 		//Compile the functions present in the code
 		if(c.getFunctions() != null) {
 			for(Function func : c.getFunctions()) {
 				functions.put(func.getName(), func);
 				
+				currentFunctionParams = new HashSet<String>(func.getParameters());
 				List<Statement> funcBody = func.getBody();
 				BasicBlock funcHead = new BasicBlock();
-				compileIntoBBs(funcBody, funcHead);
+				
+				for(String param : currentFunctionParams) {
+					FunctionArg paramFArg = new FunctionArg(param);
+					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,paramFArg, new DesName(param));
+					//Do not append, because this move is a place holder for defuse purposes
+					//currBB.appendInstruction(i);
+					funcHead.updateVariable(param, paramFArg, i.getID());
+				}
+				
+				BasicBlock lastBlock = compileIntoBBs(funcBody, funcHead);
+				if(!lastBlock.isReturnBlock()) {
+					lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.RETURN));
+					lastBlock.setIsReturnBlock();
+				}
 				functionBBs.put(func.getName(),funcHead);
 			}
 		}
 		
 		//Compile the main statement
+		currentFunctionParams = new HashSet<String>();
 		List<Statement> mainCode = c.getBody();
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
@@ -171,7 +187,8 @@ public class Compiler {
 						currBB.appendInstruction(i);
 					} else {
 						Instruction i = Instruction.makeInstruction(InstructionType.MOVE,arg, new DesName(var));
-						currBB.appendInstruction(i);
+						//Do not append, because this move is a place holder for defuse purposes
+						//currBB.appendInstruction(i);
 						addPossibleUse(currBB,i.getID(),arg);
 						currBB.updateVariable(var, arg, i.getID());
 					}
@@ -511,7 +528,7 @@ public class Compiler {
 			VariableArg varg = bb.getVariable(var);
 			if(varg == null) {
 				//Global variable
-				i = Instruction.makeInstruction(InstructionType.LOAD, args);//TODO: is this the right behavior?
+				i = Instruction.makeInstruction(InstructionType.LOAD, args);
 				bb.appendInstruction(i);
 				return i.getID();
 			} else {

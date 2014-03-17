@@ -95,6 +95,31 @@ public abstract class Argument {
 		}
 	}
 	
+	public static class FunctionArg extends Argument {
+		private String name;
+		public FunctionArg(String n) {
+			name = n;
+		}
+		public String getName() {
+			return name;
+		}
+		public int hashCode() {
+			return name.hashCode();
+		}
+		public boolean equals(Argument arg) {
+			return super.equals(arg) && this.equals((FunctionArg)arg);
+		}
+		public boolean equals(FunctionArg farg) {
+			return name.equals(farg.getName());
+		}
+		public String toString() {
+			return "FunctionArg." + name;
+		}
+		public Argument clone() {
+			return new FunctionArg(name);
+		}
+	}
+	
 	public static class DesName extends Argument {
 		private String name;
 		public DesName(String n) {
@@ -149,7 +174,7 @@ public abstract class Argument {
 		private InstructionID def;
 		public VariableArg(String vr, Argument vl, InstructionID d) {
 			var = vr;
-			assert vl instanceof Value || vl instanceof InstructionID;
+			assert vl instanceof Value || vl instanceof InstructionID || vl instanceof FunctionArg;
 			val = vl;
 			def = d;
 		}

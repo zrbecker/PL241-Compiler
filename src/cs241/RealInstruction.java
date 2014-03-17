@@ -6,6 +6,7 @@ import java.util.Map;
 
 import cs241.Argument.BasicBlockID;
 import cs241.Argument.DesName;
+import cs241.Argument.FunctionArg;
 import cs241.Argument.FunctionName;
 import cs241.Argument.InstructionID;
 import cs241.Argument.Value;
@@ -62,13 +63,14 @@ public class RealInstruction {
 	public static final int F2 = -2;
 	public static final int F3 = -3;
 	public static final int NONE = -4;
-	public static final int R0 = 0;
-	public static final int R1 = 1;
-	public static final int R2 = 2;
-	public static final int R28 = 28;
-	public static final int R29 = 29;
-	public static final int R30 = 30;
-	public static final int R31 = 31;
+	public static final int ZERO_REG = 0; //Always 0
+	public static final int R1 = 1; //First register for spillage
+	public static final int R2 = 2; //Second register for spillage
+	public static final int RETURN_VALUE = 3; //Return value of functions
+	public static final int FRAME_POINTER = 28;
+	public static final int STACK_POINTER = 29;
+	public static final int HEAP_MEMORY_LOCATION = 30; //Heap location
+	public static final int BRANCH_RETURN_ADDRESS = 31; //Return address
 	
 	public static int[] instructionOpCodeToFormat = {F2, F2, F2, F2, F2, F2, NONE, NONE, F2, F2, F2, F2, F2, F2, F2, //14
 									NONE, F1, F1, F1, F1, F1, F1, NONE, NONE, F1, F1, F1, F1, F1, F1, F1, //30
@@ -78,31 +80,38 @@ public class RealInstruction {
 
 	public class RealInstructionListFactory {
 		/*
-		 * The instruction to register map should not use registers 0,28,29,30,31,1,2
+		 * The instruction to register map should not use registers 0,28,29,30,31,1,2,3
 		 */
 		Map<InstructionID,Integer> instructionToRegister;
 		
 		/*
-		 * The variable to offset map should map global variables and arrays to particular offsets from R30
+		 * The heap variable to offset map should map global variables and arrays to particular offsets from R30
 		 */
-		Map<String,Integer> variableToOffset;
+		Map<String,Integer> heapVariableToOffset;
+		
+		/*
+		 * The stack variable to offset map should map function parameters to particular offsets from R28
+		 */
+		Map<FunctionArg,Integer> stackVariableToOffset;
 		
 		/*
 		 * The instruction to offset map should map spilled instructions to particular offsets from R30
 		 */
 		Map<InstructionID,Integer> instructionToOffset;
+		
 		//For now we assume everything is on the heap
 		
 		Map<String,BasicBlockID> functionToBasicBlockID;
+		
 
-		InstructionID currentR1;
-		InstructionID currentR2;
+		Argument currentR1;
+		Argument currentR2;
 		
 		List<RealInstruction> instructions;
 		public RealInstructionListFactory(Map<InstructionID,Integer> insToReg, Map<String,Integer> varToOff, Map<InstructionID,Integer> insToOff, Map<String,BasicBlockID> funToBBID) {
 			instructionToRegister = insToReg;
 			instructionToOffset = insToOff;
-			variableToOffset = varToOff;
+			heapVariableToOffset = varToOff;
 			functionToBasicBlockID = funToBBID;
 			instructions = new ArrayList<RealInstruction>();
 		}
@@ -111,7 +120,8 @@ public class RealInstruction {
 			return instructions;
 		}
 		
-		public void makeRealInstructions(BasicBlock bb) {
+		public int makeRealInstructions(BasicBlock bb) {
+			int indexToReturn = instructions.size();
 			InstructionID conditionalBranch = null;
 			for(Instruction i : bb.instructions) {
 				InstructionID resultID = i.getID();
@@ -133,74 +143,153 @@ public class RealInstruction {
 						//Global variable load
 						DesName var = (DesName)i.args[0];
 						String v = var.getName();
-						Integer offset = variableToOffset.get(v);
-						Integer resultReg = instructionToRegister.get(resultID);
+						Integer offset = heapVariableToOffset.get(v);
+						Integer resultReg = getRegisterFor(resultID);
+						
 						if (resultReg == -1) {
-							resultReg = findRegisterFor(resultID);
+							resultReg = R2;
 						}
-						instructions.add(new RealInstruction(LDW,resultReg,R30,offset));
+						
+						prepareRegister(resultReg,resultID);
+						instructions.add(new RealInstruction(LDW,resultReg,HEAP_MEMORY_LOCATION,offset));
 					} else {
 						//Array load
 						DesName var = (DesName)i.args[0];
-						InstructionID index = (InstructionID)i.args[1];
 						String v = var.getName();
-						Integer offset = variableToOffset.get(v);
+						Integer offset = heapVariableToOffset.get(v);
 						Integer resultReg = instructionToRegister.get(resultID);
-						Integer indexReg = instructionToRegister.get(index);
-						if (resultReg == -1 || indexReg == -1) {
-							//TODO: handle 2 spilled variables
+						
+						
+						if(i.args[1] instanceof InstructionID || i.args[1] instanceof FunctionArg) {
+							Argument index = i.args[1];
+							Integer indexReg = getRegisterFor(i.args[1]);
+							
+							if (resultReg == -1 || indexReg == -1) {
+								if(indexReg == -1 && resultReg == -1) {
+									putArgInR2(index);
+									indexReg = R2;
+									resultReg = R2;
+								} else if (indexReg == -1) {
+									putArgInR2(index);
+									indexReg = R2;
+								} else {//resultReg == -1
+									resultReg = R2;
+								}
+							}
+
+							prepareRegister(R2,null);
+							instructions.add(new RealInstruction(ADDI,R2,indexReg,offset));
+							prepareRegister(resultReg,resultID);
+							instructions.add(new RealInstruction(LDX,resultReg,HEAP_MEMORY_LOCATION,R2));
+						} else if (i.args[1] instanceof Value) {
+							Value index = (Value)i.args[1];
+							if(resultReg == -1) {
+								resultReg = R2;
+							}
+							
+							prepareRegister(resultReg, resultID);
+							instructions.add(new RealInstruction(LDW,resultReg,HEAP_MEMORY_LOCATION,offset + index.getValue()));
+						} else {
+							System.out.println("Error: unrecognized argument type.");
 						}
-						instructions.add(new RealInstruction(ADDI,R2,indexReg,offset));
-						currentR2 = null;
-						instructions.add(new RealInstruction(LDX,resultReg,R30,R2));
 					}
 					break;
 				case STORE:
 					if(i.args.length == 2) {
 						//Global variable store
 						DesName var = (DesName)i.args[0];
-						Integer valReg;
-						if(i.args[1] instanceof InstructionID) {
-							InstructionID val = (InstructionID)i.args[1];
-							valReg = instructionToRegister.get(val);
-							if(valReg == -1) {
-								valReg = findRegisterFor(val);
-							}
-						} else {
-							Value val = (Value)i.args[1];
-							valReg = R1;
-							currentR1 = null;
-							instructions.add(new RealInstruction(ADDI,valReg,R0,val.getValue()));
-						}
 						String v = var.getName();
-						Integer offset = variableToOffset.get(v);
-						instructions.add(new RealInstruction(STW,valReg,R30,offset));
+						Integer offset = heapVariableToOffset.get(v);
+						if(i.args[1] instanceof InstructionID || i.args[1] instanceof FunctionArg) {
+							Argument val = (Argument)i.args[1];
+							Integer valReg = getRegisterFor(val);
+							if(valReg == -1) {
+								putArgInR2(val);
+								valReg = R2;
+							}
+							
+							instructions.add(new RealInstruction(STW,valReg,HEAP_MEMORY_LOCATION,offset));
+						} else if (i.args[1] instanceof Value) {
+							Value val = (Value)i.args[1];
+							putArgInR1(val);
+							instructions.add(new RealInstruction(STW,R1,HEAP_MEMORY_LOCATION,offset));
+						} else {
+							System.out.println("Error: unrecognized argument type.");
+						}
 					} else {
 						//Array store
-						DesName var = (DesName)i.args[0];
-						Integer valReg;
-						if(i.args[1] instanceof InstructionID) {
-							InstructionID val = (InstructionID)i.args[1];
-							valReg = instructionToRegister.get(val);
-						} else {
-							Value val = (Value)i.args[1];
-							valReg = R1;
-							currentR1 = null;
-							instructions.add(new RealInstruction(ADDI,valReg,R0,val.getValue()));
-						}
-						InstructionID index = (InstructionID)i.args[2];
+						DesName var = (DesName)i.args[1];
 						String v = var.getName();
-						Integer offset = variableToOffset.get(v);
-						Integer indexReg = instructionToRegister.get(index);
-						if(valReg == -1 || indexReg == -1) {
-							//TODO: handle 2 spilled variables
+						Integer offset = heapVariableToOffset.get(v);
+						Integer valReg;
+						if(i.args[0] instanceof InstructionID || i.args[0] instanceof FunctionArg) {
+							Argument val = i.args[0];
+							valReg = getRegisterFor(val);
+						} else {
+							Value val = (Value)i.args[0];
+							valReg = R1;
+							putArgInR1(val);
 						}
-						instructions.add(new RealInstruction(ADDI,R2,indexReg,offset));
-						currentR2 = null;
-						instructions.add(new RealInstruction(STX,valReg,R30,R2));
+						
+						if(i.args[2] instanceof InstructionID || i.args[2] instanceof FunctionArg) {
+							Argument index = i.args[2];
+							Integer indexReg = getRegisterFor(index);
+							if(valReg == -1 || indexReg == -1) {
+								if(valReg == -1 && indexReg == -1) {
+									//indexReg must be R2 and valReg must be R1
+									putArgInR1(i.args[0]);
+									putArgInR2(index);
+									valReg = R1;
+									indexReg = R2;
+								} else if (valReg == -1) {
+									putArgInR1(i.args[0]);
+									valReg = R1;
+								} else {//indexReg == -1
+									putArgInR2(index);
+									indexReg = R2;
+								}
+							}
+							prepareRegister(R2,null);
+							instructions.add(new RealInstruction(ADDI,R2,indexReg,offset));
+							instructions.add(new RealInstruction(STX,valReg,HEAP_MEMORY_LOCATION,R2));
+						} else {
+							Value index = (Value)i.args[2];
+							if(valReg == -1) {
+								putArgInR1(i.args[0]);
+								valReg = R1;
+							}
+							instructions.add(new RealInstruction(STX,valReg,HEAP_MEMORY_LOCATION,offset + index.getValue()));
+						}
 					}
 					break;
 				case MOVE:
+					InstructionID target = (InstructionID)i.args[1];
+					Integer targetReg = instructionToRegister.get(target);
+					if(i.args[0] instanceof InstructionID || i.args[0] instanceof FunctionArg) {
+						Argument value =  i.args[0];
+						Integer valueReg = getRegisterFor(value);
+						if(targetReg == -1 || valueReg == -1) {
+							if (targetReg == -1 && valueReg == -1) {
+								targetReg = R1;
+								putArgInR2(value);
+								valueReg = R2;
+							} else if (targetReg == -1) {
+								targetReg = R1;
+							} else { //valueReg == -1
+								putArgInR2(value);
+								valueReg = R2;
+							}
+						}
+						prepareRegister(targetReg, value);
+						instructions.add(new RealInstruction(ADDI, targetReg, valueReg, 0));
+					} else {
+						Value value = (Value)i.args[0];
+						if(targetReg == -1) {
+							targetReg = R2;
+						}
+						prepareRegister(targetReg,value);
+						instructions.add(new RealInstruction(ADDI, targetReg, ZERO_REG, value.getValue()));
+					}
 					break;
 				case FUNCTION:
 					makeFunctionCallInstructions(i.args, resultID);
@@ -234,98 +323,165 @@ public class RealInstruction {
 				
 			if(bb.getNext() != null)
 				makeRealInstructions(bb.getNext());
+			return indexToReturn;
 		}
 		
-		private Integer findRegisterFor(InstructionID id) {
-			Integer reg;
-			if (currentR1 != null && id.equals(currentR1)) {
-				reg = R1;
-			} else if (currentR2 != null && id.equals(currentR2)) {
-				reg = R2;
-			} else {
-				if(currentR1 == null || currentR2 == null) {
-					if(currentR1 == null) {
-						reg = R1;
-						currentR1 = id;
-					} else {
-						reg = R2;
-						currentR2 = id;
-					}
-				} else {
-					reg = R1;//TODO: pick randomly?
-					currentR1 = id;
-					
-					Integer offset = instructionToOffset.get(id);
-					instructions.add(new RealInstruction(LDW, reg, R30, offset));
+		private Integer getRegisterFor(Argument arg) {
+			Integer i = instructionToRegister.get(arg);
+			if(i == null)
+				return -1;
+			else
+				return i;
+		}
+		
+		private void prepareRegister(Integer resultReg, Argument arg) {
+			if(resultReg == R1) {
+				if(currentR1 != null) {
+					storeR1();
 				}
+				currentR1 = arg;
+			} else if (resultReg == R2) {
+				if(currentR2 != null) {
+					storeR2();
+				}
+				currentR2 = arg;
 			}
-			return reg;
+		}
+
+		private void storeR1() {
+			if(currentR1 != null && currentR1 instanceof InstructionID) {
+				Integer offset = instructionToOffset.get(currentR1);
+				instructions.add(new RealInstruction(STW, R1, HEAP_MEMORY_LOCATION, offset));
+			}
+			currentR1 = null;
+		}
+		
+		private void storeR2() {
+			if(currentR2 != null && currentR1 instanceof InstructionID) {
+				Integer offset = instructionToOffset.get(currentR2);
+				instructions.add(new RealInstruction(STW, R2, HEAP_MEMORY_LOCATION, offset));
+			}
+			currentR2 = null;
+		}
+		
+		/*
+		 * Overwrites R1 with arg
+		 */
+		private void putArgInR1(Argument arg) {
+			if(currentR1 != null && arg.equals(currentR1))
+				return;
+			storeR1();
+			if(arg instanceof InstructionID) {
+				Integer offset = instructionToOffset.get(arg);
+				instructions.add(new RealInstruction(LDW, R1, HEAP_MEMORY_LOCATION, offset));
+			} else if(arg instanceof Value) {
+				instructions.add(new RealInstruction(ADDI, R1, ZERO_REG, ((Value)arg).getValue()));
+			} else { //arg instanceof FunctionArg
+				Integer offset = stackVariableToOffset.get(arg);
+				instructions.add(new RealInstruction(LDW, R1, FRAME_POINTER, offset));
+			}
+			currentR1 = arg;
+		}
+		
+		/*
+		 * Overwrites R2 with arg
+		 */
+		private void putArgInR2(Argument arg) {
+			if(currentR2 != null && arg.equals(currentR2))
+				return;
+			storeR2();
+			if(arg instanceof InstructionID) {
+				Integer offset = instructionToOffset.get(arg);
+				instructions.add(new RealInstruction(LDW, R2, HEAP_MEMORY_LOCATION, offset));
+			} else if(arg instanceof Value) {
+				instructions.add(new RealInstruction(ADDI, R2, ZERO_REG, ((Value)arg).getValue()));
+			} else { //arg instanceof FunctionArg
+				Integer offset = stackVariableToOffset.get(arg);
+				instructions.add(new RealInstruction(LDW, R2, FRAME_POINTER, offset));
+			}
+			currentR2 = arg;
 		}
 
 		private void decideInstructionType(Argument a1, Argument a2, int opcode, int opcodei, InstructionID resultID) {
 			if(a1 instanceof Value) {
-				makeTwoRegOneValueInstruction(opcodei, resultID, (InstructionID)a2, ((Value)a1).getValue());
+				makeTwoRegOneValueInstruction(opcodei, resultID, a2, ((Value)a1).getValue());
 			} else if(a2 instanceof Value) {
-				makeTwoRegOneValueInstruction(opcodei, resultID, (InstructionID)a1, ((Value)a2).getValue());
+				makeTwoRegOneValueInstruction(opcodei, resultID, a1, ((Value)a2).getValue());
 			} else {
-				makeThreeRegInstruction(opcode, resultID, (InstructionID)a1, (InstructionID)a2);
+				makeThreeRegInstruction(opcode, resultID, a1, a2);
 			}
 		}
 		
 		private void decideInstructionTypeNoncomm(Argument a1, Argument a2, int opcode, int opcodei, InstructionID resultID) {
-			if(a1 instanceof Value) {
-				return;//TODO: cannot put constant as first arg for immediate instruction
-			} else if(a2 instanceof Value) {
-				makeTwoRegOneValueInstruction(opcodei, resultID, (InstructionID)a1, ((Value)a2).getValue());
+			if(a2 instanceof Value) {
+				makeTwoRegOneValueInstruction(opcodei, resultID, a1, ((Value)a2).getValue());
 			} else {
-				makeThreeRegInstruction(opcode, resultID, (InstructionID)a1, (InstructionID)a2);
+				makeThreeRegInstruction(opcode, resultID, a1, a2);
 			}
 		}
 		
-		private void makeThreeRegInstruction(int opc, InstructionID resultID, InstructionID input1ID, InstructionID input2ID) {
-			Integer resultReg = instructionToRegister.get(resultID);
-			Integer input1Reg = instructionToRegister.get(input1ID);
-			Integer input2Reg = instructionToRegister.get(input2ID);
-			if(resultReg == -1 || input1Reg == -1 || input2Reg == -1) {
-				//TODO: handle spilled variables
+		private void makeThreeRegInstruction(int opc, InstructionID resultID, Argument arg1, Argument arg2) {
+			Integer resultReg = getRegisterFor(resultID);
+			Integer input1Reg = getRegisterFor(arg1);
+			Integer input2Reg = getRegisterFor(arg2);
+			if(resultReg == -1) {
+				resultReg = R1;
 			}
+			if(input1Reg == -1) {
+				putArgInR1(arg1);
+				input1Reg = R1;
+			}
+			if(input2Reg == -1) {
+				putArgInR2(arg2);
+				input2Reg = R2;
+			}
+			
+			prepareRegister(resultReg,resultID);
 			instructions.add(new RealInstruction(opc, resultReg, input1Reg, input2Reg));
 		}
 		
-		private void makeTwoRegOneValueInstruction(int opc, InstructionID resultID, InstructionID inputID, int v) {
-			Integer resultReg = instructionToRegister.get(resultID);
-			Integer inputReg = instructionToRegister.get(inputID);
-			if(resultReg == -1 || inputReg == -1) {
-				//TODO: handle spilled variables
+		private void makeTwoRegOneValueInstruction(int opc, InstructionID resultID, Argument arg, int v) {
+			Integer resultReg = getRegisterFor(resultID);
+			Integer inputReg = getRegisterFor(arg);
+			if(inputReg == -1) {
+				putArgInR1(arg);
+				inputReg = R1;
 			}
+			if(resultReg == -1) {
+				resultReg = R2;
+			}
+			prepareRegister(resultReg,resultID);
 			instructions.add(new RealInstruction(opc, resultReg, inputReg, v));
 		}
+		
 		private void makeBranchInstruction(BasicBlockID targetID) {
-			instructions.add(new RealBranchInstruction(BSR, 0, 0, 0, targetID));//TODO: is it always correct to use BSR?
+			instructions.add(new RealJumpInstruction(JSR, 0, 0, 0, targetID));
 		}
+		
 		private void makeBranchInstruction(BasicBlockID targetID, InstructionID inputID, InstructionType branchType) {
-			Integer inputReg = instructionToRegister.get(inputID);
+			Integer inputReg = getRegisterFor(inputID);
 			if(inputReg == -1) {
-				inputReg = findRegisterFor(inputID);
+				putArgInR1(inputID);
+				inputReg = R1;
 			}
 			switch(branchType) {
 			case BNE:
-				instructions.add(new RealBranchInstruction(BNE, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BNE, inputReg, 0, 0, targetID));
 				break;
 			case BEQ:
-				instructions.add(new RealBranchInstruction(BEQ, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BEQ, inputReg, 0, 0, targetID));
 				break;
 			case BLE:
-				instructions.add(new RealBranchInstruction(BLE, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BLE, inputReg, 0, 0, targetID));
 				break;
 			case BLT:
-				instructions.add(new RealBranchInstruction(BLT, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BLT, inputReg, 0, 0, targetID));
 				break;
 			case BGE:
-				instructions.add(new RealBranchInstruction(BGE, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BGE, inputReg, 0, 0, targetID));
 				break;
 			case BGT:
-				instructions.add(new RealBranchInstruction(BGT, inputReg, 0, 0, targetID));
+				instructions.add(new RealJumpInstruction(BGT, inputReg, 0, 0, targetID));
 				break;
 			default:
 				System.out.println("Error: bad branch type for branch instruction");
@@ -333,27 +489,74 @@ public class RealInstruction {
 		}
 		
 		private void makeFunctionCallInstructions(Argument[] args, InstructionID resultID) {
-			Integer resultReg = instructionToRegister.get(resultID);
+			Integer resultReg = getRegisterFor(resultID);
 			FunctionName fn = (FunctionName) args[0];
 			String f = fn.getName();
 			if (f.equals("INPUTNUM")) {
+				if(resultReg == -1) {
+					resultReg = R1;
+				}
+				prepareRegister(resultReg,resultID);
 				instructions.add(new RealInstruction(RDD,resultReg,0,0));
 			} else if (f.equals("OUTPUTNUM")) {
-				Integer inputReg = instructionToRegister.get((InstructionID)args[0]);
+				Integer inputReg = getRegisterFor(args[1]);
 				if(inputReg == -1) {
-					//TODO: handle spilled variables
-					inputReg = findRegisterFor((InstructionID)args[0]);
+					putArgInR1(args[1]);
+					inputReg = R1;
 				}
 				instructions.add(new RealInstruction(WRD,0,inputReg,0));
 			} else if (f.equals("OUTPUTNEWLINE")) {
 				instructions.add(new RealInstruction(WRL,0,0,0));
 			} else {
 				//TODO: general function call
-			}
+				int total = 0;
+				instructions.add(new RealInstruction(ADDI, FRAME_POINTER, STACK_POINTER, 4));
+				for(int i = 1; i < args.length; i++) {
+					Integer paramReg = getRegisterFor(args[i]);
+					if(paramReg == -1) {
+						putArgInR1(args[i]);
+						paramReg = R1;
+					}
+					instructions.add(new RealInstruction(PSH, paramReg, STACK_POINTER, 4));
+					total+=4;
+				}
+				prepareRegister(R1,null);
+				instructions.add(new RealInstruction(ADDI, R1, ZERO_REG, total));
+				instructions.add(new RealInstruction(PSH, R1, STACK_POINTER, 4));
+				
+				RealInstruction retValInstruction = new RealInstruction(ADDI, R1, ZERO_REG, 4*(instructions.size()+4));
+				instructions.add(retValInstruction);
+				instructions.add(new RealInstruction(PSH, R1, STACK_POINTER, 4));
+				instructions.add(new RealJumpInstruction(JSR,0,0,0,functionToBasicBlockID.get(f)));
+				
+				Integer returnReg = getRegisterFor(resultID);
+				if(returnReg == -1) {
+					Integer heapOffset = heapVariableToOffset.get(resultID);
+					if(heapOffset == null)
+						return;//This means that the instructionID we would return into is not a variable
+					//TODO: handle return values better
+					returnReg = R1;
+				}
+				instructions.add(new RealInstruction(ADDI,returnReg,RETURN_VALUE,0));
+			}//TODO: check what happens at end of functions
 		}
 		
 		private void makeReturnStatementInstructions(Argument[] args) {
-			// TODO Auto-generated method stub
+			prepareRegister(R1,null);
+			prepareRegister(R2,null);
+			instructions.add(new RealInstruction(POP, R1, STACK_POINTER, -4));//return address
+			instructions.add(new RealInstruction(POP, R2, FRAME_POINTER, -8));//distance to previous frame
+			instructions.add(new RealInstruction(ADDI, STACK_POINTER, FRAME_POINTER, 4));
+			instructions.add(new RealInstruction(SUB, FRAME_POINTER, FRAME_POINTER, R2));
+			if(args.length != 0) {
+				Integer reg = getRegisterFor(args[0]);
+				if(reg == -1) {
+					reg = R1;
+					putArgInR1(args[0]);
+				}
+				prepareRegister(reg, args[0]);
+				instructions.add(new RealInstruction(ADDI, RETURN_VALUE, reg, 0));
+			}
 		}
 	}
 	
@@ -381,15 +584,26 @@ public class RealInstruction {
 	}
 	
 	public byte toByte() {
-		return (byte) ((opCode<< (27)) | (a << 21) | (b << 16) | c);
+		int opbyte = ((opCode & 0b111111) << (27));
+		int abyte = ((a & 0b11111) << 21);
+		int bbyte = ((b & 0b11111) << 16);
+		int cbyte;
+		if(format == F1) {
+			cbyte =  (c & 0xFFFF);
+		} else if(format == F2) {
+			cbyte = (c & 0b11111);
+		} else { //format == F3
+			cbyte =  (c & 0x6FFFFFF);
+		}
+		return (byte) (opbyte | abyte | bbyte | cbyte);
 	}
 	
 	/*
-	 * Use RealBranchInstruction during conversion, then once basicblock locations are know scan back through and fix things up
+	 * Use RealJumpInstruction during conversion, then once basicblock locations are know scan back through and fix things up
 	 */
-	private class RealBranchInstruction extends RealInstruction {
+	private class RealJumpInstruction extends RealInstruction {
 		private BasicBlockID branchID;
-		private RealBranchInstruction(int opc, int a, int b, int c, BasicBlockID bbID) {
+		private RealJumpInstruction(int opc, int a, int b, int c, BasicBlockID bbID) {
 			super(opc, a, b, c);
 			branchID = bbID;
 		}
@@ -398,11 +612,11 @@ public class RealInstruction {
 		}
 	}
 	
-	public static void fixUpBasicBlockIDs(List<RealInstruction> ins, Map<BasicBlockID,Integer> bbIDToLoc) {
+	public static void fixUpJumpsAndReturns(List<RealInstruction> ins, Map<BasicBlockID,Integer> bbIDToLoc) {
 		for(int i = 0; i < ins.size(); i++) {
 			RealInstruction ri = ins.get(i);
-			if(ri instanceof RealBranchInstruction) {
-				ri.c = bbIDToLoc.get(((RealBranchInstruction)ri).getTargetBBID());
+			if(ri instanceof RealJumpInstruction) {
+				ri.c = bbIDToLoc.get(((RealJumpInstruction)ri).getTargetBBID());
 			}
 		}
 	}
