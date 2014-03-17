@@ -3,6 +3,7 @@ package cs241.parser;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 
 import cs241.parser.treenodes.Computation;
 import cs241.parser.treenodes.Expression;
@@ -19,6 +20,7 @@ public class Parser {
 	
 	String currentFunction = "main";
 	HashMap<String, ArrayList<String>> nameLists = new HashMap<String, ArrayList<String>>();
+	HashSet<String> globals = new HashSet<String>();
 
 	public Parser() {
 		
@@ -29,6 +31,10 @@ public class Parser {
 		tokenCount = -1;
 		nextToken();
 		return parseComputation();
+	}
+	
+	public HashSet<String> getGlobals() {
+		return globals;
 	}
 
 	private void nextToken() {
@@ -105,6 +111,7 @@ public class Parser {
 
 		parseTokens(Token.Type.LEFT_CURLY);
 
+		currentFunction = "main";
 		ArrayList<Statement> body = parseStatSequence();
 		
 		parseTokens(Token.Type.RIGHT_CURLY);
@@ -365,12 +372,13 @@ public class Parser {
 		
 		ArrayList<String> names = nameLists.get(currentFunction);
 		// Check is variable is valid local variable name
-		if (!names.contains(name)) {
+		if (!names.contains(name) || (currentFunction.equals("main") && globals.contains(name))) {
 			names = nameLists.get("main");
 			// Check is variable is valid global variable name
 			if (!names.contains(name))
 				throw new ParserException("Invalid variable name '" + name + "'");
 			isGlobal = true;
+			globals.add(name);
 		}
 		
 		ArrayList<Expression> indices = null;
