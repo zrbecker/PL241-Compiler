@@ -817,6 +817,7 @@ public class Compiler {
 			} else if (in.type == InstructionType.STOREADD) {
 				DesName arrName = (DesName)in.args[1];
 				Variable v = variables.get(arrName.getName());
+				// TODO: Nullpointer exception on global array
 				List<Integer> dims = v.getDimensions();
 				InstructionID newID;
 				if(dims.size() == 1) {
