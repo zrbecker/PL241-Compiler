@@ -508,8 +508,9 @@ public class RealInstructionListFactory {
 		} else if (f.equals("OUTPUTNEWLINE")) {
 			instructions.add(new RealInstruction(WRL,0,0,0));
 		} else {
-			instructions.add(new RealInstruction(PSH, FRAME_POINTER, STACK_POINTER, 4));
-			instructions.add(new RealInstruction(ADDI, FRAME_POINTER, STACK_POINTER, 0));
+			instructions.add(new RealInstruction(PSH, FRAME_POINTER, STACK_POINTER, 4)); //Push old frame pointer
+			instructions.add(new RealInstruction(ADDI, FRAME_POINTER, STACK_POINTER, 4)); //Put frame pointer at new position
+			//Push parameters
 			for(int i = 1; i < args.length; i++) {
 				Integer paramReg = getRegisterFor(args[i]);
 				if(paramReg == -1) {
@@ -518,6 +519,12 @@ public class RealInstructionListFactory {
 				}
 				instructions.add(new RealInstruction(PSH, paramReg, STACK_POINTER, 4));
 			}
+			
+			//Push registers
+			for(int i = 4; i < 28; i++) {
+				instructions.add(new RealInstruction(PSH, i, STACK_POINTER, 4));
+			}
+			
 			prepareRegister(R1,null);
 			prepareRegister(R2,null);
 			int retAddress = 4*(instructions.size()+3);
@@ -541,9 +548,17 @@ public class RealInstructionListFactory {
 	private void makeReturnStatementInstructions(Argument[] args) {
 		prepareRegister(R1,null);
 		prepareRegister(R2,null);
-		instructions.add(new RealInstruction(POP, R1, STACK_POINTER, -4));//return address
-		instructions.add(new RealInstruction(ADDI, STACK_POINTER, FRAME_POINTER, 4));
+		instructions.add(new RealInstruction(POP, R1, STACK_POINTER, -4));// Pop return address
+		
+		//Pop registers
+		for(int i = 27; i > 3; i--) {
+			instructions.add(new RealInstruction(POP, i, STACK_POINTER, -4));
+		}
+		
+		instructions.add(new RealInstruction(ADDI, STACK_POINTER, FRAME_POINTER, -8));//Stack pointer set to old stack pointer
+		instructions.add(new RealInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, -4));//Frame pointer now points at old frame location
 		instructions.add(new RealInstruction(POP, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
+		
 		if(args.length != 0) {
 			Integer reg = getRegisterFor(args[0]);
 			if(reg == -1) {

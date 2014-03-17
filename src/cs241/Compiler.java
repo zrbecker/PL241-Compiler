@@ -148,7 +148,11 @@ public class Compiler {
 
 		//TODO: setup default value for variables
 		RegisterAllocator allocator = new RegisterAllocator();
-		Map<Instruction,Integer> mainAllocation = allocator.allocate(mainRoot);
+		Map<InstructionID,Integer> mainAllocation = allocator.allocate(mainRoot);
+		Map<String,Map<InstructionID,Integer>> functionAllocations = new HashMap<String,Map<InstructionID,Integer>>();
+		for(String funcName : functions.keySet()) {
+			functionAllocations.put(funcName, allocator.allocate(functionBBs.get(funcName)));
+		}
 		//TODO: eliminate phis
 		//TODO: allocate function bbs
 		
@@ -171,7 +175,7 @@ public class Compiler {
 		}
 		Map<FunctionArg,Integer> stackVariableToOffset = new HashMap<FunctionArg,Integer>();
 		for(Function func : c.getFunctions()) {
-			int pos = +4;
+			int pos = 4;
 			for(String param : func.getParameters()) {
 				stackVariableToOffset.put(new FunctionArg(param),pos);
 				pos+=4;

@@ -77,7 +77,7 @@ public class RegisterAllocator {
 	public RegisterAllocator() {
 	}
 	
-	public Map<Instruction, Integer> allocate(BasicBlock b) {
+	public Map<InstructionID, Integer> allocate(BasicBlock b) {
 		// Reset allocator
 		interferenceGraph = new Graph();
 		bbInfo = new HashMap<BasicBlock, BasicBlockInfo>();
@@ -89,7 +89,12 @@ public class RegisterAllocator {
 		colorGraph();
 		saveVCGGraph("interference.vcg"); // For debugging
 		
-		return colors;
+		Map<InstructionID,Integer> coloredIDs = new HashMap<InstructionID,Integer>();
+		for(Instruction i : colors.keySet()) {
+			coloredIDs.put(i.getID(),colors.get(i));
+		}
+		
+		return coloredIDs;
 	}
 	
 	private void colorGraph() {
@@ -100,6 +105,8 @@ public class RegisterAllocator {
 				if (!colors.containsKey(a) && (maxDegree == null || interferenceGraph.getDegree(a) > interferenceGraph.getDegree(maxDegree)))
 					maxDegree = a;
 			}
+			if(maxDegree == null)
+				break;
 			
 			Set<Integer> taken = new HashSet<Integer>();
 			for (Instruction b : interferenceGraph.getNeighbors(maxDegree)) {
