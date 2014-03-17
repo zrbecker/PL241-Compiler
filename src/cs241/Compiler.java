@@ -320,6 +320,7 @@ public class Compiler {
 				While currWhile = (While) curr;
 				
 				BasicBlock condition = new BasicBlock();
+				condition.setWhileConditionBlock();
 				condition.copyAllTablesFrom(currBB);
 				BasicBlock loop = new BasicBlock();
 				loop.copyVariableTableFrom(currBB);

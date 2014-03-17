@@ -32,6 +32,7 @@ public class BasicBlock {
 	List<Instruction> instructions;
 	
 	private boolean returnBlock;
+	private boolean whileConditionBlock;
 	
 	private Map<String,VariableArg> varLookupTable;
 	private Set<String> changedVariables;
@@ -54,6 +55,7 @@ public class BasicBlock {
 		dominated = new ArrayList<BasicBlock>();
 		instructions = new LinkedList<Instruction>();
 		returnBlock = false;
+		whileConditionBlock = false;
 		varLookupTable = new HashMap<String,VariableArg>();
 		changedVariables = new HashSet<String>();
 		bbID = new BasicBlockID(nextBBID);
@@ -129,6 +131,14 @@ public class BasicBlock {
 	
 	public void setIsReturnBlock() {
 		returnBlock = true;
+	}
+
+	public boolean isWhileConditionBlock() {
+		return whileConditionBlock;
+	}
+
+	public void setWhileConditionBlock() {
+		whileConditionBlock = true;
 	}
 	
 	public void updateVariable(String var, Argument arg, InstructionID defInstructionID) {
