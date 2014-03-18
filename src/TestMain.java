@@ -6,8 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 
 import cs241.Compiler;
-import cs241.RealInstruction;
-import cs241.RealInstructionListFactory;
+import cs241.ByteInstruction;
+import cs241.ByteInstructionListFactory;
 
 public class TestMain {
 	public static void main(String[] args) throws IOException {

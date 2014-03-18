@@ -245,12 +245,12 @@ public class Compiler {
 		}
 		
 		//Create real instructions
-		RealInstructionListFactory realInstructionMaker = new RealInstructionListFactory(instructionToRegister,heapVariableToOffset,stackVariableToOffset,onHeap,basicBlockIDToSizeOfVariables,functionToBBIDs);
+		ByteInstructionListFactory realInstructionMaker = new ByteInstructionListFactory(instructionToRegister,heapVariableToOffset,stackVariableToOffset,onHeap,basicBlockIDToSizeOfVariables,functionToBBIDs);
 		realInstructionMaker.makeRealInstructions(mainRoot);
 		for(BasicBlock fbb : functionBBs.values()) {
 			realInstructionMaker.makeRealInstructions(fbb);
 		}
-		List<RealInstruction> realInstructions = realInstructionMaker.getRealInstructionList();
+		List<ByteInstruction> realInstructions = realInstructionMaker.getRealInstructionList();
 		
 		//Switch to a byte array
 		int[] ops = new int[realInstructions.size()];
