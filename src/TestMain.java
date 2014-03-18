@@ -6,21 +6,27 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 
 import cs241.Compiler;
+import cs241.RealInstruction;
+import cs241.RealInstructionListFactory;
 
 public class TestMain {
 	public static void main(String[] args) throws IOException {
 		File inFile = new File("./programs/factorial.txt");
 		File outFile = null;
 		Compiler comp = new Compiler(inFile,outFile);
-		byte[] bytes;
+		int[] ops;
 		try {
-			bytes = comp.compile();
+			ops = comp.compile();
 		} catch (FileNotFoundException e1) {
-			bytes = new byte[0];
+			ops = new int[0];
 			e1.printStackTrace();
 		}
-
-		//Files.write(FileSystems.getDefault().getPath("program.out"), bytes, StandardOpenOption.CREATE);
-		System.out.println("finished");
+		System.out.println("finished with " + ops.length + " operations");
+		boolean runProgram = true;
+		
+		if(ops.length != 0 && runProgram) {
+			DLX.load(ops);
+			DLX.execute();
+		}
 	}
 }
