@@ -105,6 +105,11 @@ public class RealInstructionListFactory {
 	List<RealInstruction> instructions;
 	public RealInstructionListFactory(Map<InstructionID,Integer> insToReg, Map<Argument,Integer> heapVarToOff, Map<Argument,Integer> stackVarToOff, Set<Argument> varsOnHeap, Map<BasicBlockID,Integer> bbIDsToVarSize, Map<String,BasicBlockID> funToBBID) {
 		instructionToRegister = insToReg;
+		for(InstructionID id : instructionToRegister.keySet()) {
+			Integer reg = instructionToRegister.get(id);
+			if(reg <=3 || reg >= 28)
+				System.out.println("Error: using reserved register");
+		}
 		heapVariableToOffset = heapVarToOff;
 		stackVariableToOffset = stackVarToOff;
 		onHeap = varsOnHeap;
@@ -123,7 +128,7 @@ public class RealInstructionListFactory {
 	}
 	
 	public void makeRealInstructions(BasicBlock bb) {
-		bbIDToLoc.put(bb.getID(), instructions.size()*4 + 4);
+		bbIDToLoc.put(bb.getID(), instructions.size());
 		InstructionID conditionalBranch = null;
 		for(Instruction i : bb.instructions) {
 			InstructionID resultID = i.getID();
@@ -310,7 +315,7 @@ public class RealInstructionListFactory {
 				//Note: there should be no more instructions after a ret
 				break;
 			default:
-				System.out.println("Error: unrecognized instruction type.");//LOADADD and STOREADD have been removed and branches are special
+				System.out.println("Error: unrecognized instruction type: " + i.type);//LOADADD and STOREADD have been removed and branches are special
 			}
 		}
 		
@@ -509,20 +514,20 @@ public class RealInstructionListFactory {
 		Integer resultReg = getRegisterFor(resultID);
 		FunctionName fn = (FunctionName) args[0];
 		String f = fn.getName();
-		if (f.equals("INPUTNUM")) {
+		if (f.equals("InputNum")) {
 			if(resultReg == -1) {
 				resultReg = R1;
 			}
 			prepareRegister(resultReg,resultID);
 			instructions.add(new RealInstruction(RDD,resultReg,0,0));
-		} else if (f.equals("OUTPUTNUM")) {
+		} else if (f.equals("OutputNum")) {
 			Integer inputReg = getRegisterFor(args[1]);
 			if(inputReg == -1) {
 				putArgInR1(args[1]);
 				inputReg = R1;
 			}
 			instructions.add(new RealInstruction(WRD,0,inputReg,0));
-		} else if (f.equals("OUTPUTNEWLINE")) {
+		} else if (f.equals("OutputNewLine")) {
 			instructions.add(new RealInstruction(WRL,0,0,0));
 		} else {
 			instructions.add(new RealInstruction(PSH, FRAME_POINTER, STACK_POINTER, 4)); //Push old frame pointer
@@ -537,11 +542,11 @@ public class RealInstructionListFactory {
 				instructions.add(new RealInstruction(PSH, paramReg, STACK_POINTER, 4));
 			}
 			//Push variables
-			Integer size = basicBlockIDToSizeOfVariables.get(bb.getID());
+			Integer size = basicBlockIDToSizeOfVariables.get(functionToBasicBlockID.get(f));
 			instructions.add(new RealInstruction(PSH, 0, STACK_POINTER, size));
 			
 			//Push registers
-			for(int i = 4; i < 28; i++) {
+			for(int i = 4; i <= 27; i++) {
 				instructions.add(new RealInstruction(PSH, i, STACK_POINTER, 4));
 			}
 			
@@ -570,14 +575,14 @@ public class RealInstructionListFactory {
 		prepareRegister(R2,null);
 		instructions.add(new RealInstruction(POP, R1, STACK_POINTER, -4));// Pop return address
 		
-		//Pop registers
-		for(int i = 27; i > 3; i--) {
+		//Pop saved registers
+		for(int i = 27; i >= 4; i--) {
 			instructions.add(new RealInstruction(POP, i, STACK_POINTER, -4));
 		}
 		
 		instructions.add(new RealInstruction(ADDI, STACK_POINTER, FRAME_POINTER, -8));//Stack pointer set to old stack pointer
 		instructions.add(new RealInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, -4));//Frame pointer now points at old frame location
-		instructions.add(new RealInstruction(POP, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
+		instructions.add(new RealInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
 		
 		if(args.length != 0) {
 			Integer reg = getRegisterFor(args[0]);
@@ -594,7 +599,13 @@ public class RealInstructionListFactory {
 		for(int i = 0; i < instructions.size(); i++) {
 			RealInstruction ri = instructions.get(i);
 			if(ri instanceof RealJumpInstruction) {
-				ri.c = bbIDToLoc.get(((RealJumpInstruction)ri).getTargetBBID());
+				int target = bbIDToLoc.get(((RealJumpInstruction)ri).getTargetBBID());
+				int current = i;
+				int op = ri.opCode;
+				if(op == JSR)
+					ri.c = 4*target;
+				else
+					ri.c = target - current;
 			}
 		}
 	}

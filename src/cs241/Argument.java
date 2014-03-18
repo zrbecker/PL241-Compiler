@@ -32,7 +32,7 @@ public abstract class Argument {
 		public int hashCode() {
 			return 37*val;
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((Value)arg);
 		}
 		public boolean equals(Value v) {
@@ -58,7 +58,7 @@ public abstract class Argument {
 		public int hashCode() {
 			return 31*bbID;
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((BasicBlockID)arg);
 		}
 		public boolean equals(BasicBlockID id) {
@@ -83,7 +83,7 @@ public abstract class Argument {
 		public int hashCode() {
 			return 43*instructionID;
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((InstructionID)arg);
 		}
 		public boolean equals(InstructionID id) {
@@ -111,7 +111,7 @@ public abstract class Argument {
 			return function;
 		}
 		public int hashCode() {
-			return 1;//name.hashCode() + function.hashCode();
+			return name.hashCode() + function.hashCode();
 		}
 		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((FunctionArg)arg);
@@ -138,7 +138,7 @@ public abstract class Argument {
 		public int hashCode() {
 			return name.hashCode();
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((DesName)arg);
 		}
 		public boolean equals(DesName dn) {
@@ -162,7 +162,7 @@ public abstract class Argument {
 		public int hashCode() {
 			return name.hashCode();
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((FunctionName)arg);
 		}
 		public boolean equals(FunctionName fn) {
@@ -201,7 +201,7 @@ public abstract class Argument {
 		public boolean isVariable() {
 			return true;
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((VariableArg)arg);
 		}
 		public boolean equals(VariableArg v) {
@@ -248,7 +248,7 @@ public abstract class Argument {
 		public List<InstructionID> getCopyDefs() {
 			return copyDefs;
 		}
-		public boolean equals(Argument arg) {
+		public boolean equals(Object arg) {
 			return super.equals(arg) && this.equals((CopiedVariable)arg);
 		}
 		public boolean equals(CopiedVariable v) {

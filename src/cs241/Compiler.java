@@ -5,9 +5,6 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -77,7 +74,7 @@ public class Compiler {
 		expressionInstructions.add(InstructionType.SUB);
 	}
 
-	public byte[] compile() throws IOException {
+	public int[] compile() throws IOException {
 		c = getParseTree();
 		if(c == null) {
 			System.out.println("Parsing error. Terminating.");
@@ -139,7 +136,6 @@ public class Compiler {
 		}
 		refreshDefUseChain();
 		
-		
 		//Run common subexpression elimination
 		runCommonSubexpressionEliminationAndCopyPropagation(mainRoot);
 		for(BasicBlock bb : functionBBs.values()) {
@@ -155,10 +151,12 @@ public class Compiler {
 			functionToAllocation.put(funcName, allocator.allocate(functionBBs.get(funcName)));
 		}
 		
-		
-		//TODO: eliminate phis
-		//TODO: allocate function bbs
-		
+		removePhis(mainRoot,mainAllocation);
+		for(String funcName : functions.keySet()) {
+			removePhis(functionBBs.get(funcName),functionToAllocation.get(funcName));
+		}
+
+		System.out.println("###### WITHOUT PHI INSTRUCTIONS ######");
 		System.out.println(mainRoot);
 		for(BasicBlock fbb : functionBBs.values()) {
 			System.out.println(fbb);
@@ -211,6 +209,7 @@ public class Compiler {
 				currentStackOffset+=4;
 			}
 			int paramSize = currentStackOffset;
+			
 			//Handle function arrays on stack
 			for(Variable var : func.getVariables()) {
 				if(var.getDimensions().size() > 0)
@@ -254,18 +253,60 @@ public class Compiler {
 		List<RealInstruction> realInstructions = realInstructionMaker.getRealInstructionList();
 		
 		//Switch to a byte array
-		byte[] bytes = new byte[realInstructions.size()];
-		for(int i = 0; i < realInstructions.size(); i++)
-			bytes[i] = realInstructions.get(i).toByte();
+		int[] ops = new int[realInstructions.size()];
+		for(int i = 0; i < realInstructions.size(); i++) {
+			System.out.println(i +": " + realInstructions.get(i).opCode + " " + realInstructions.get(i).a + " " + realInstructions.get(i).b + " " + realInstructions.get(i).c);
+			ops[i] = realInstructions.get(i).toInt();
+		}
 		
-		return bytes;
+		return ops;
 	}
 	
-	public Map<Argument, Integer> getHeapOffsets() {
-		// Setup heap offsets for each global variable
-		// Setup heap offsets for each array in main
-		// Setup heap offsets for each virtual register in main
-		return null;
+	private void removePhis(BasicBlock bb, Map<InstructionID, Integer> allocation) {
+		List<Instruction> instructions = bb.getInstructions();
+		while(instructions.size() > 0 && instructions.get(0).type == InstructionType.PHI) {
+			Instruction phi = instructions.get(0);
+			instructions.remove(0);
+			Integer reg = allocation.get(phi.getID());
+			if(reg == null) {
+				//If the result of the phi has no register it was not used
+				continue;
+			}
+			Argument arg1 = phi.args[0];
+			Argument arg2 = phi.args[1];
+			BasicBlock arg1BB;
+			BasicBlock arg2BB;
+			if(bb.isWhileConditionBlock()) {
+				arg1BB = bb.parents.get(0).isLastWhileLoopBlock() ? bb.parents.get(0) : bb.parents.get(1);
+				arg2BB = bb.parents.get(0).isLastWhileLoopBlock() ? bb.parents.get(1) : bb.parents.get(0);
+				//arg1 comes from lastLoop
+				//arg2 comes from beforeCondition
+			} else {
+				arg1BB = bb.parents.get(0).isLastThenBlock() ? bb.parents.get(0) : bb.parents.get(1);
+				arg2BB = bb.parents.get(0).isLastThenBlock() ? bb.parents.get(1) : bb.parents.get(0);
+				//arg1 comes from lastThen
+				//arg2 comes from other
+			}
+			Integer reg1 = -1;
+			if(arg1 instanceof InstructionID) {
+				reg1 = allocation.get(arg1);
+			}
+			if(reg1 != reg) {
+				arg1BB.appendInstruction(Instruction.makeInstruction(InstructionType.MOVE, arg1, phi.getID()));
+			}
+			Integer reg2 = -1;
+			if(arg2 instanceof InstructionID) {
+				reg2 = allocation.get(arg2);
+			}
+			if(reg2 != reg) {
+				arg2BB.appendInstruction(Instruction.makeInstruction(InstructionType.MOVE, arg2, phi.getID()));
+			}
+		}
+		
+		
+		if(bb.getNext() != null) {
+			removePhis(bb.getNext(), allocation);
+		}
 	}
 
 	public Computation getParseTree() throws FileNotFoundException {
@@ -421,6 +462,8 @@ public class Compiler {
 					for(String var : changedVars) {
 						VariableArg loc1 = lastIfThenBlock.getVariable(var);
 						VariableArg loc2 = lastIfElseBlock.getVariable(var);
+						if(loc1 == null || loc2 == null)
+							continue;
 						
 						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
@@ -488,7 +531,8 @@ public class Compiler {
 				
 				//Compile loop block
 				BasicBlock lastLoopBlock = compileIntoBBs(currWhile.getBlock(), loop);
-
+				lastLoopBlock.setLastWhileLoopBlock();
+				
 				if(lastLoopBlock.isReturnBlock()) {
 					afterLoop.copyAllTablesFrom(condition);
 				} else {
@@ -816,8 +860,21 @@ public class Compiler {
 				simpleReplace(in.getID(),newID);
 			} else if (in.type == InstructionType.STOREADD) {
 				DesName arrName = (DesName)in.args[1];
-				Variable v = variables.get(arrName.getName());
-				// TODO: Nullpointer exception on global array
+				Variable v = null;
+				if(globalVariables.contains(arrName.getName())) {
+					for(Variable var : c.getVariables()) {
+						if(var.getName().equals(arrName.getName())) {
+							v = var;
+							break;
+						}
+					}
+					if(v == null) {
+						System.out.println("Error: global variable " + arrName + " is null");
+					}
+				} else {
+					v = variables.get(arrName.getName());
+				}
+				// TODO: Nullpointer exception on global array, double check works
 				List<Integer> dims = v.getDimensions();
 				InstructionID newID;
 				if(dims.size() == 1) {
@@ -906,6 +963,7 @@ public class Compiler {
 				Instruction replace = lookForCopy(ins,l);
 				
 				if(replace != null) {
+					System.out.println("Replacing " + ins.getID() + " with " + replace.getID());
 					simpleReplace(ins.getID(),replace.getID());
 					bb.getInstructions().remove(i);
 					i--;
@@ -929,6 +987,7 @@ public class Compiler {
 				boolean same = true;
 				for(int i = 0; i < ins.args.length; i++) {
 					if(!ins.args[i].equals(ins2.args[i])) {
+						System.out.println();
 						same = false;
 					}
 				}

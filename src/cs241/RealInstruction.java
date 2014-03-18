@@ -21,7 +21,7 @@ public class RealInstruction {
 	int a;
 	int b;
 	int c;
-	RealInstruction(int opc, int a, int b, int c) {
+	public RealInstruction(int opc, int a, int b, int c) {
 		opCode = opc;
 		format = instructionOpCodeToFormat[opc];
 		this.a = a;
@@ -39,32 +39,32 @@ public class RealInstruction {
 			System.out.println("Error: arg c should be less than 67108864.");
 	}
 	
-	public byte toByte() {
-		int opbyte = ((opCode & 0b111111) << (27));
-		int abyte = ((a & 0b11111) << 21);
-		int bbyte = ((b & 0b11111) << 16);
+	public int toInt() {
+		int opbyte = ((opCode & 0x3F) << 26);
+		int abyte = ((a & 0x1F) << 21);
+		int bbyte = ((b & 0x1F) << 16);
 		int cbyte;
 		if(format == F1) {
 			cbyte =  (c & 0xFFFF);
 		} else if(format == F2) {
-			cbyte = (c & 0b11111);
+			cbyte = (c & 0x1F);
 		} else { //format == F3
-			cbyte =  (c & 0x6FFFFFF);
+			cbyte =  (c & 0x3FFFFFF);
 		}
-		return (byte) (opbyte | abyte | bbyte | cbyte);
+		return (opbyte | abyte | bbyte | cbyte);
 	}
 	
 	/*
 	 * Use RealJumpInstruction during conversion, then once basicblock locations are know scan back through and fix things up
 	 */
 	public static class RealJumpInstruction extends RealInstruction {
-		private BasicBlockID branchID;
+		private BasicBlockID branchTargetID;
 		public RealJumpInstruction(int opc, int a, int b, int c, BasicBlockID bbID) {
 			super(opc, a, b, c);
-			branchID = bbID;
+			branchTargetID = bbID;
 		}
 		public BasicBlockID getTargetBBID() {
-			return branchID;
+			return branchTargetID;
 		}
 	}
 }

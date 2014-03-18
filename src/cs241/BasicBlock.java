@@ -33,6 +33,7 @@ public class BasicBlock {
 	
 	private boolean returnBlock;
 	private boolean whileConditionBlock;
+	private boolean lastWhileLoopBlock;
 	private boolean lastThenBlock;
 	
 	private Map<String,VariableArg> varLookupTable;
@@ -140,6 +141,14 @@ public class BasicBlock {
 
 	public void setWhileConditionBlock() {
 		whileConditionBlock = true;
+	}
+	
+	public boolean isLastWhileLoopBlock() {
+		return lastWhileLoopBlock;
+	}
+	
+	public void setLastWhileLoopBlock() {
+		lastWhileLoopBlock = true;
 	}
 	
 	public boolean isLastThenBlock() {
