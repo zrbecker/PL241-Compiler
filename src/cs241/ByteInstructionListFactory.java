@@ -68,6 +68,8 @@ public class ByteInstructionListFactory {
 	public static final int R1 = 1; //First register for spillage
 	public static final int R2 = 2; //Second register for spillage
 	public static final int RETURN_VALUE = 3; //Return value of functions
+	public static final int SMALLEST_FREE_REG = 4;
+	public static final int BIGGEST_FREE_REG = 27;
 	public static final int FRAME_POINTER = 28;
 	public static final int STACK_POINTER = 29;
 	public static final int HEAP_MEMORY_LOCATION = 30;
@@ -116,6 +118,7 @@ public class ByteInstructionListFactory {
 		basicBlockIDToSizeOfVariables = bbIDsToVarSize;
 		functionToBasicBlockID = funToBBID;
 		instructions = new ArrayList<ByteInstruction>();
+		instructions.add(new ByteInstruction(STW, ZERO_REG, FRAME_POINTER, 0));
 		bbIDToLoc = new HashMap<BasicBlockID,Integer>();
 	}
 	
@@ -128,6 +131,7 @@ public class ByteInstructionListFactory {
 	}
 	
 	public void makeRealInstructions(BasicBlock bb) {
+		System.out.println(bb.getID() + " starts at " + instructions.size());
 		bbIDToLoc.put(bb.getID(), instructions.size());
 		InstructionID conditionalBranch = null;
 		for(Instruction i : bb.instructions) {
@@ -149,7 +153,8 @@ public class ByteInstructionListFactory {
 				if (i.args.length == 1) {
 					//Global variable load
 					DesName var = (DesName)i.args[0];
-					Integer offset = heapVariableToOffset.get(var);
+					Integer offset = getOffset(var);
+					Integer lookupReg = getHeapOrStackRegister(var);
 					Integer resultReg = getRegisterFor(resultID);
 					
 					if (resultReg == -1) {
@@ -157,12 +162,12 @@ public class ByteInstructionListFactory {
 					}
 					
 					prepareRegister(resultReg,resultID);
-					instructions.add(new ByteInstruction(LDW,resultReg,HEAP_MEMORY_LOCATION,offset));
+					instructions.add(new ByteInstruction(LDW,resultReg,lookupReg,offset));
 				} else {
 					//Array load
 					DesName var = (DesName)i.args[0];
 					Integer offset = getOffset(var);
-					Integer lookupReg = getHeapOrStack(var);
+					Integer lookupReg = getHeapOrStackRegister(var);
 					Integer resultReg = instructionToRegister.get(resultID);
 					
 					
@@ -182,7 +187,7 @@ public class ByteInstructionListFactory {
 								resultReg = R2;
 							}
 						}
-
+						
 						prepareRegister(R2,null);
 						instructions.add(new ByteInstruction(ADDI,R2,indexReg,offset));
 						prepareRegister(resultReg,resultID);
@@ -205,7 +210,7 @@ public class ByteInstructionListFactory {
 					//Global variable store
 					DesName var = (DesName)i.args[0];
 					Integer offset = getOffset(var);
-					Integer lookupReg = getHeapOrStack(var);
+					Integer lookupReg = getHeapOrStackRegister(var);
 					if(i.args[1] instanceof InstructionID || i.args[1] instanceof FunctionArg) {
 						Argument val = (Argument)i.args[1];
 						Integer valReg = getRegisterFor(val);
@@ -226,7 +231,7 @@ public class ByteInstructionListFactory {
 					//Array store
 					DesName var = (DesName)i.args[1];
 					Integer offset = getOffset(var);
-					Integer lookupReg = getHeapOrStack(var);
+					Integer lookupReg = getHeapOrStackRegister(var);
 					Integer valReg;
 					if(i.args[0] instanceof InstructionID || i.args[0] instanceof FunctionArg) {
 						Argument val = i.args[0];
@@ -264,7 +269,7 @@ public class ByteInstructionListFactory {
 							putArgInR1(i.args[0]);
 							valReg = R1;
 						}
-						instructions.add(new ByteInstruction(STX,valReg,HEAP_MEMORY_LOCATION,offset + index.getValue()));
+						instructions.add(new ByteInstruction(STW,valReg,lookupReg,offset + index.getValue()));
 					}
 				}
 				break;
@@ -331,7 +336,7 @@ public class ByteInstructionListFactory {
 			makeRealInstructions(bb.getNext());
 	}
 	
-	private Integer getHeapOrStack(Argument arg) {
+	private Integer getHeapOrStackRegister(Argument arg) {
 		if(onHeap.contains(arg))
 			return HEAP_MEMORY_LOCATION;
 		else
@@ -371,7 +376,7 @@ public class ByteInstructionListFactory {
 	private void storeR1() {
 		if(currentR1 != null && currentR1 instanceof InstructionID) {
 			Integer offset = getOffset(currentR1);
-			Integer lookupReg = getHeapOrStack(currentR1);
+			Integer lookupReg = getHeapOrStackRegister(currentR1);
 			instructions.add(new ByteInstruction(STW, R1, lookupReg, offset));
 		}
 		currentR1 = null;
@@ -380,7 +385,7 @@ public class ByteInstructionListFactory {
 	private void storeR2() {
 		if(currentR2 != null && currentR2 instanceof InstructionID) {
 			Integer offset = getOffset(currentR2);
-			Integer lookupReg = getHeapOrStack(currentR2);
+			Integer lookupReg = getHeapOrStackRegister(currentR2);
 			instructions.add(new ByteInstruction(STW, R2, lookupReg, offset));
 		}
 		currentR2 = null;
@@ -395,7 +400,7 @@ public class ByteInstructionListFactory {
 		storeR1();
 		if(arg instanceof InstructionID || arg instanceof FunctionArg) {
 			Integer offset = getOffset(arg);
-			Integer lookupReg = getHeapOrStack(arg);
+			Integer lookupReg = getHeapOrStackRegister(arg);
 			instructions.add(new ByteInstruction(LDW, R1, lookupReg, offset));
 		} else if(arg instanceof Value) {
 			instructions.add(new ByteInstruction(ADDI, R1, ZERO_REG, ((Value)arg).getValue()));
@@ -414,7 +419,7 @@ public class ByteInstructionListFactory {
 		storeR2();
 		if(arg instanceof InstructionID || arg instanceof FunctionArg) {
 			Integer offset = getOffset(arg);
-			Integer lookupReg = getHeapOrStack(arg);
+			Integer lookupReg = getHeapOrStackRegister(arg);
 			instructions.add(new ByteInstruction(LDW, R2, lookupReg, offset));
 		} else if(arg instanceof Value) {
 			instructions.add(new ByteInstruction(ADDI, R2, ZERO_REG, ((Value)arg).getValue()));
@@ -477,7 +482,7 @@ public class ByteInstructionListFactory {
 	}
 	
 	private void makeBranchInstruction(BasicBlockID targetID) {
-		instructions.add(new ByteJumpInstruction(JSR, 0, 0, 0, targetID));
+		instructions.add(new ByteJumpInstruction(BSR, 0, 0, 0, targetID));
 	}
 	
 	private void makeBranchInstruction(BasicBlockID targetID, InstructionID inputID, InstructionType branchType) {
@@ -531,7 +536,7 @@ public class ByteInstructionListFactory {
 			instructions.add(new ByteInstruction(WRL,0,0,0));
 		} else {
 			instructions.add(new ByteInstruction(PSH, FRAME_POINTER, STACK_POINTER, 4)); //Push old frame pointer
-			instructions.add(new ByteInstruction(ADDI, FRAME_POINTER, STACK_POINTER, 4)); //Put frame pointer at new position
+			instructions.add(new ByteInstruction(ADDI, FRAME_POINTER, STACK_POINTER, 0)); //Put frame pointer at new position
 			//Push parameters
 			for(int i = 1; i < args.length; i++) {
 				Integer paramReg = getRegisterFor(args[i]);
@@ -543,10 +548,11 @@ public class ByteInstructionListFactory {
 			}
 			//Push variables
 			Integer size = basicBlockIDToSizeOfVariables.get(functionToBasicBlockID.get(f));
-			instructions.add(new ByteInstruction(PSH, 0, STACK_POINTER, size));
+			if(size != null && size != 0)
+				instructions.add(new ByteInstruction(PSH, 0, STACK_POINTER, size));
 			
 			//Push registers
-			for(int i = 4; i <= 27; i++) {
+			for(int i = SMALLEST_FREE_REG; i <= BIGGEST_FREE_REG; i++) {
 				instructions.add(new ByteInstruction(PSH, i, STACK_POINTER, 4));
 			}
 			
@@ -556,7 +562,6 @@ public class ByteInstructionListFactory {
 			ByteInstruction retValInstruction = new ByteInstruction(ADDI, R1, ZERO_REG, retAddress);
 			instructions.add(retValInstruction);
 			instructions.add(new ByteInstruction(PSH, R1, STACK_POINTER, 4));
-			instructions.add(new ByteInstruction(WRD,0,STACK_POINTER,0));
 			instructions.add(new ByteJumpInstruction(JSR,0,0,0,functionToBasicBlockID.get(f)));
 			
 			Integer returnReg = getRegisterFor(resultID);
@@ -574,19 +579,7 @@ public class ByteInstructionListFactory {
 	private void makeReturnStatementInstructions(Argument[] args) {
 		prepareRegister(R1,null);
 		prepareRegister(R2,null);
-		instructions.add(new ByteInstruction(WRD,0,STACK_POINTER,0));
-		instructions.add(new ByteInstruction(WRL,0,0,0));
-		instructions.add(new ByteInstruction(POP, R2, STACK_POINTER, -4));// Pop return address
-		
-		//Pop saved registers
-		for(int i = 27; i >= 4; i--) {
-			instructions.add(new ByteInstruction(POP, i, STACK_POINTER, -4));
-		}
-		
-		instructions.add(new ByteInstruction(ADDI, STACK_POINTER, FRAME_POINTER, -8));//Stack pointer set to old stack pointer
-		instructions.add(new ByteInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, -4));//Frame pointer now points at old frame location
-		instructions.add(new ByteInstruction(POP, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
-		
+
 		if(args.length != 0) {
 			Integer reg = getRegisterFor(args[0]);
 			if(reg == -1) {
@@ -597,6 +590,16 @@ public class ByteInstructionListFactory {
 			instructions.add(new ByteInstruction(ADDI, RETURN_VALUE, reg, 0));
 		}
 		
+		instructions.add(new ByteInstruction(POP, R2, STACK_POINTER, 0));// Pop return address
+
+		
+		//Pop saved registers
+		for(int i = BIGGEST_FREE_REG; i >= SMALLEST_FREE_REG; i--) {
+			instructions.add(new ByteInstruction(POP, i, STACK_POINTER, -4));
+		}
+		
+		instructions.add(new ByteInstruction(ADDI, STACK_POINTER, FRAME_POINTER, -4));//Stack pointer set to old stack pointer
+		instructions.add(new ByteInstruction(POP, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
 		instructions.add(new ByteInstruction(RET, 0, 0, R2));
 	}
 	

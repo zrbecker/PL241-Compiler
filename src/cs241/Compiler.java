@@ -114,6 +114,13 @@ public class Compiler {
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
 		lastBlock.setIsReturnBlock();
 		
+
+		System.out.println("###### INTERMEDIATE REP ######");
+		System.out.println(mainRoot);
+		for(BasicBlock fbb : functionBBs.values()) {
+			System.out.println(fbb);
+		}
+		
 		//Simplify arguments and create new DefUse chain
 		mainRoot.simplify();
 		for(BasicBlock bb : functionBBs.values()) {
@@ -143,7 +150,6 @@ public class Compiler {
 		}
 		refreshDefUseChain();
 
-		//TODO: setup default value for variables
 		RegisterAllocator allocator = new RegisterAllocator();
 		Map<InstructionID,Integer> mainAllocation = allocator.allocate(mainRoot);
 		Map<String,Map<InstructionID,Integer>> functionToAllocation = new HashMap<String,Map<InstructionID,Integer>>();
@@ -175,7 +181,7 @@ public class Compiler {
 		int currentHeapOffset = 0;
 		//Handle arrays in main on heap
 		for(Variable var : c.getVariables()) {
-			if(var.getDimensions().size() > 0)
+			if(var.getDimensions().size() == 0 && !globalVariables.contains(var.getName()))
 				continue;
 			int dim = 1;
 			for(Integer d : var.getDimensions()) {
@@ -202,7 +208,7 @@ public class Compiler {
 		Map<BasicBlockID,Integer> basicBlockIDToSizeOfVariables = new HashMap<BasicBlockID,Integer>();
 		for(Function func : c.getFunctions()) {
 			//Handle function params on the stack
-			int currentStackOffset = 0;
+			int currentStackOffset = 4;
 			for(String param : func.getParameters()) {
 				FunctionArg farg = new FunctionArg(func.getName(), param);
 				stackVariableToOffset.put(farg, currentStackOffset);
@@ -212,7 +218,7 @@ public class Compiler {
 			
 			//Handle function arrays on stack
 			for(Variable var : func.getVariables()) {
-				if(var.getDimensions().size() > 0)
+				if(var.getDimensions().size() == 0)
 					continue;
 				int dim = 1;
 				for(Integer d : var.getDimensions()) {
@@ -544,6 +550,9 @@ public class Compiler {
 					for(String var : lastLoopBlock.getChangedVariables()) {
 						VariableArg loc1 = lastLoopBlock.getVariable(var);
 						VariableArg loc2 = currBB.getVariable(var);
+						
+						if(loc1 == null || loc2 == null)
+							continue;
 						
 						Instruction i = Instruction.makeInstruction(InstructionType.PHI,loc1,loc2);
 						//Implicit store instruction to make a def
@@ -963,7 +972,6 @@ public class Compiler {
 				Instruction replace = lookForCopy(ins,l);
 				
 				if(replace != null) {
-					System.out.println("Replacing " + ins.getID() + " with " + replace.getID());
 					simpleReplace(ins.getID(),replace.getID());
 					bb.getInstructions().remove(i);
 					i--;
@@ -977,7 +985,12 @@ public class Compiler {
 		
 		//Recurse into dominated blocks
 		for(BasicBlock bbDom : bb.dominated) {
-			runCommonSubexpressionElimination(bbDom, new HashMap<InstructionType,List<Instruction>>(lookup));
+			Map<InstructionType,List<Instruction>> newLookup = new HashMap<InstructionType,List<Instruction>>();
+			for(InstructionType it : lookup.keySet()) {
+				List<Instruction> l = lookup.get(it);
+				newLookup.put(it, new LinkedList<Instruction>(l));
+			}
+			runCommonSubexpressionElimination(bbDom, newLookup);
 		}
 	}
 
@@ -987,7 +1000,6 @@ public class Compiler {
 				boolean same = true;
 				for(int i = 0; i < ins.args.length; i++) {
 					if(!ins.args[i].equals(ins2.args[i])) {
-						System.out.println();
 						same = false;
 					}
 				}
