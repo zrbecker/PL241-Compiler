@@ -98,6 +98,12 @@ public class Compiler {
 					funcHead.updateVariable(param, paramFArg, i.getID());
 				}
 				
+				for(Variable v : func.getVariables()) {
+					Value val = new Value(0);
+					Instruction i = Instruction.makeInstruction(InstructionType.MOVE,val, new DesName(v.getName()));
+					funcHead.updateVariable(v.getName(), val, i.getID());
+				}
+				
 				BasicBlock lastBlock = compileIntoBBs(funcBody, funcHead);
 				if(!lastBlock.isReturnBlock()) {
 					lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.RETURN));
@@ -110,6 +116,12 @@ public class Compiler {
 		//Compile the main statement
 		currentFunctionParams = new HashSet<String>();
 		List<Statement> mainCode = c.getBody();
+		for(Variable v : c.getVariables()) {
+			Value val = new Value(0);
+			Instruction i = Instruction.makeInstruction(InstructionType.MOVE,val, new DesName(v.getName()));
+			mainRoot.updateVariable(v.getName(), val, i.getID());
+		}
+		
 		BasicBlock lastBlock = compileIntoBBs(mainCode,mainRoot);
 		lastBlock.appendInstruction(Instruction.makeInstruction(InstructionType.END));
 		lastBlock.setIsReturnBlock();
