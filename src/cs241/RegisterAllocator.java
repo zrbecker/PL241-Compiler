@@ -84,10 +84,10 @@ public class RegisterAllocator {
 		loopHeaders = new HashSet<BasicBlock>();
 		colors = new HashMap<Instruction, Integer>();
 		
-		calcLiveRange(b, 0, 1);
-		calcLiveRange(b, 0, 2);
+		calcLiveRange(b, null, 1);
+		calcLiveRange(b, null, 2);
 		colorGraph();
-		saveVCGGraph("interference.vcg"); // For debugging
+		saveVCGGraph(b.getID().toString() + "interference.vcg"); // For debugging
 		
 		Map<InstructionID,Integer> coloredIDs = new HashMap<InstructionID,Integer>();
 		for(Instruction i : colors.keySet()) {
@@ -154,7 +154,7 @@ public class RegisterAllocator {
 		}
 	}
 	
-	private Set<Instruction> calcLiveRange(BasicBlock b, int branch, int pass) {
+	private Set<Instruction> calcLiveRange(BasicBlock b, BasicBlock last, int pass) {
 		Set<Instruction> live = new HashSet<Instruction>();
 		
 		if (!bbInfo.containsKey(b))
@@ -175,7 +175,7 @@ public class RegisterAllocator {
 					if (b.isWhileConditionBlock() && index == 0)
 						loopHeaders.add(b);
 					
-					live.addAll(calcLiveRange(child, index, pass));
+					live.addAll(calcLiveRange(child, b, pass));
 					index += 1;
 					
 					if (b.isWhileConditionBlock() && index == 0)
@@ -214,14 +214,13 @@ public class RegisterAllocator {
 					for (Instruction other : live)
 						interferenceGraph.addEdge(ins, other);
 					
-					for (Argument arg : ins.args) {
-						if (arg instanceof InstructionID)
-							live.add(Instruction.getInstructionByID((InstructionID) arg));
-					}
-					
-//					Argument arg = ins.args[branch];
-//					if (arg instanceof InstructionID)
-//						live.add(Instruction.getInstructionByID((InstructionID) arg));
+					Argument arg;
+					if (last.isLastThenBlock() || last.isLastWhileLoopBlock())
+						arg = ins.args[0];
+					else
+						arg = ins.args[1];
+					if (arg instanceof InstructionID)
+						live.add(Instruction.getInstructionByID((InstructionID) arg));
 				}
 			}
 		}
