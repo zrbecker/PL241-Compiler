@@ -121,6 +121,9 @@ public class Compiler {
 			System.out.println(fbb);
 		}
 		
+		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
+		exporter.exportAsVCG(inputFile.getName() + "_intermediate.vcg", mainRoot, functionBBs);
+		
 		//Simplify arguments and create new DefUse chain
 		mainRoot.simplify();
 		for(BasicBlock bb : functionBBs.values()) {
@@ -168,10 +171,7 @@ public class Compiler {
 			System.out.println(fbb);
 		}
 		
-		
-		String vcgName = inputFile.getName() + ".vcg";
-		ControlFlowGraphVCG exporter = new ControlFlowGraphVCG();
-		exporter.exportAsVCG(vcgName, mainRoot, functionBBs);
+		exporter.exportAsVCG(inputFile.getName() + "_without_phi.vcg", mainRoot, functionBBs);
 		
 		
 		//Create maps for compiling to real instructions

@@ -222,7 +222,8 @@ public class DLX {
 					System.out.println("DLX.execute: Unknown opcode encountered!");
 					bug(1);
 			}
-			System.out.println("Ran instruction " + PC);
+			if (Globals.DLXPrintInstructions)
+				System.out.println("Ran instruction " + PC);
 			PC = nextPC;
 		}
 

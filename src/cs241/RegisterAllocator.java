@@ -87,7 +87,7 @@ public class RegisterAllocator {
 		calcLiveRange(b, null, 1);
 		calcLiveRange(b, null, 2);
 		colorGraph();
-		saveVCGGraph(b.getID().toString() + "interference.vcg"); // For debugging
+		// saveVCGGraph(b.getID().toString() + "interference.vcg"); // For debugging
 		
 		Map<InstructionID,Integer> coloredIDs = new HashMap<InstructionID,Integer>();
 		for(Instruction i : colors.keySet()) {
