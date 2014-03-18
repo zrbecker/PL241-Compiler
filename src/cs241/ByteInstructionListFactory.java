@@ -556,6 +556,7 @@ public class ByteInstructionListFactory {
 			ByteInstruction retValInstruction = new ByteInstruction(ADDI, R1, ZERO_REG, retAddress);
 			instructions.add(retValInstruction);
 			instructions.add(new ByteInstruction(PSH, R1, STACK_POINTER, 4));
+			instructions.add(new ByteInstruction(WRD,0,STACK_POINTER,0));
 			instructions.add(new ByteJumpInstruction(JSR,0,0,0,functionToBasicBlockID.get(f)));
 			
 			Integer returnReg = getRegisterFor(resultID);
@@ -573,7 +574,9 @@ public class ByteInstructionListFactory {
 	private void makeReturnStatementInstructions(Argument[] args) {
 		prepareRegister(R1,null);
 		prepareRegister(R2,null);
-		instructions.add(new ByteInstruction(POP, R1, STACK_POINTER, -4));// Pop return address
+		instructions.add(new ByteInstruction(WRD,0,STACK_POINTER,0));
+		instructions.add(new ByteInstruction(WRL,0,0,0));
+		instructions.add(new ByteInstruction(POP, R2, STACK_POINTER, -4));// Pop return address
 		
 		//Pop saved registers
 		for(int i = 27; i >= 4; i--) {
@@ -582,7 +585,7 @@ public class ByteInstructionListFactory {
 		
 		instructions.add(new ByteInstruction(ADDI, STACK_POINTER, FRAME_POINTER, -8));//Stack pointer set to old stack pointer
 		instructions.add(new ByteInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, -4));//Frame pointer now points at old frame location
-		instructions.add(new ByteInstruction(ADDI, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
+		instructions.add(new ByteInstruction(POP, FRAME_POINTER, FRAME_POINTER, 0));//Previous frame
 		
 		if(args.length != 0) {
 			Integer reg = getRegisterFor(args[0]);
@@ -593,6 +596,8 @@ public class ByteInstructionListFactory {
 			prepareRegister(reg, args[0]);
 			instructions.add(new ByteInstruction(ADDI, RETURN_VALUE, reg, 0));
 		}
+		
+		instructions.add(new ByteInstruction(RET, 0, 0, R2));
 	}
 	
 	public void fixUpJumpsAndReturns() {
